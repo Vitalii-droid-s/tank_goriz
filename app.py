@@ -104,17 +104,25 @@ if st.button("🔢 Розрахувати"):
 
     st.pyplot(fig1)
     
-    # Розрахунок меж смуг на основі шаблону
-    pattern_total_width = sum(patterns[0])
-    x_center = 0
-    x_smuha_start = x_center - pattern_total_width / 2
-    x_smuha_end = x_center + pattern_total_width / 2
+    # Визначаємо межі викладки смуг на основі усіх рядків
+    x_starts = []
+    x_ends = []
+
+    for rowNum in range(full_rows):
+        pattern = patterns[rowNum % len(patterns)]
+        total_width = sum(pattern)
+        x_start = -total_width / 2
+        x_starts.append(x_start)
+        x_ends.append(x_start + total_width)
+
+    x_smuha_start = min(x_starts)
+    x_smuha_end = max(x_ends)
     y_top = full_rows * h_smuha
 
-    # Штриховка ліворуч і праворуч від області смуг
+    # Штриховка по краях
     left_strip = plt.Rectangle((-circumference / 2, 0), x_smuha_start + circumference / 2, y_top,
                                facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
-    right_strip = plt.Rectangle((x_smuha_end, 0), (circumference / 2 - x_smuha_end), y_top,
+    right_strip = plt.Rectangle((x_smuha_end, 0), circumference / 2 - x_smuha_end, y_top,
                                 facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
     ax2.add_patch(left_strip)
     ax2.add_patch(right_strip)
