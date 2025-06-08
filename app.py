@@ -104,20 +104,22 @@ if st.button("🔢 Розрахувати"):
 
     st.pyplot(fig1)
     
-    # Штриховка по краях циліндричної частини завжди
-    x_left = -circumference / 2
-    x_right = circumference / 2
+    # Розрахунок меж смуг на основі шаблону
+    pattern_total_width = sum(patterns[0])
+    x_center = 0
+    x_smuha_start = x_center - pattern_total_width / 2
+    x_smuha_end = x_center + pattern_total_width / 2
     y_top = full_rows * h_smuha
 
-    left_strip = plt.Rectangle((x_left, 0), (circumference - Wrem) / 2, y_top,
+    # Штриховка ліворуч і праворуч від області смуг
+    left_strip = plt.Rectangle((-circumference / 2, 0), x_smuha_start + circumference / 2, y_top,
                                facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
-    right_strip = plt.Rectangle((Wrem / 2, 0), (circumference - Wrem) / 2, y_top,
+    right_strip = plt.Rectangle((x_smuha_end, 0), (circumference / 2 - x_smuha_end), y_top,
                                 facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
     ax2.add_patch(left_strip)
     ax2.add_patch(right_strip)
 
     st.pyplot(fig2)
-    
 
     cum_area_bot = sum(areas_bot)
     площа_cyl = full_rows * h_smuha * Wrem
