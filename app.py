@@ -72,62 +72,106 @@ if st.button("🔢 Розрахувати"):
 
     circumference = 2 * math.pi * R
     full_rows = math.ceil(L / h_smuha)
-
     fig2, ax2 = plt.subplots(figsize=(5, 3))
     ax2.set_aspect('auto')
-    ax2.set_xlim(-circumference / 2, circumference / 2)
-    ax2.set_ylim(0, full_rows * h_smuha)
-    ax2.axvline(0, color='red', linestyle='--')
-    ax2.axhline(L, color='red', linestyle='--')
-    ax2.set_title("Циліндр")
 
-    patterns = {
-        1: [[1]],
-        2: [[2]],
-        3: [[3]],
-        4: [[3, 1], [1, 3]],
-        5: [[3, 2], [2, 3]],
-        6: [[1, 3, 2], [2, 3, 1]]
-    }.get(int(Wrem), [[Wrem]])
+    # --- ФОН: корпус резервуара сірий, за його межами білий ---
+    y_top = full_rows * h_smuha
 
+    фон_біла_зона = plt.Rectangle(
+        (-circumference / 2, 0),
+        circumference,
+        y_top,
+        edgecolor='none',
+        facecolor='white',
+        zorder=0
+    )
+    ax2.add_patch(фон_біла_зона)
+
+    фон_резервуара = plt.Rectangle(
+        (-circumference / 2, 0),
+        circumference,
+        L,
+        edgecolor='black',
+        facecolor='#d0d0d0',
+        linewidth=1,
+        zorder=1
+    )
+    ax2.add_patch(фон_резервуара)
+
+    # Вертикальні і горизонтальні лінії
+    ax2.axvline(0, color='red', linestyle='--', linewidth=1, alpha=0.7)
+    ax2.axhline(L, color='red', linestyle='--', linewidth=1, alpha=0.7)
+
+    # Викладка смуг
+    x_start = -Wrem / 2
     for rowNum in range(full_rows):
         pattern = patterns[rowNum % len(patterns)]
         y_off = rowNum * h_smuha
+        x_off = x_start
+        visible_height = min(h_smuha, max(0.0, L - y_off))
+        is_partial = (visible_height < h_smuha)
+
         for seg in pattern:
-            x_start = -Wrem / 2 + sum(pattern[:pattern.index(seg)])
-            rect = plt.Rectangle((x_start, y_off), seg, h_smuha,
-                                 edgecolor='black', facecolor='orange' if rowNum % 2 == 0 else 'lightgreen', alpha=0.7)
-            ax2.add_patch(rect)
-            ax2.text(x_start + seg / 2, y_off + h_smuha / 2, f"{seg:.2f}м", ha='center', va='center', fontsize=7)
+            if not is_partial:
+                rect = plt.Rectangle(
+                    (x_off, y_off),
+                    seg,
+                    h_smuha,
+                    edgecolor='black',
+                    facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
+                    alpha=0.7,
+                    zorder=2
+                )
+                ax2.add_patch(rect)
+                y_label = y_off + h_smuha / 2
+            else:
+                if visible_height > 0:
+                    rect_used = plt.Rectangle(
+                        (x_off, y_off),
+                        seg,
+                        visible_height,
+                        edgecolor='black',
+                        facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
+                        alpha=0.7,
+                        zorder=2
+                    )
+                    ax2.add_patch(rect_used)
+                extra_h = h_smuha - visible_height
+                if extra_h > 0:
+                    rect_extra = plt.Rectangle(
+                        (x_off, y_off + visible_height),
+                        seg,
+                        extra_h,
+                        edgecolor='red',
+                        facecolor='none',
+                        hatch='///',
+                        alpha=0.5,
+                        zorder=3
+                    )
+                    ax2.add_patch(rect_extra)
+                y_label = y_off + (visible_height / 2 if visible_height > 0 else 0)
+
+            ax2.text(
+                x_off + seg / 2,
+                y_label,
+                f"{seg:.2f}м",
+                ha='center', va='center',
+                fontsize=7,
+                zorder=4
+            )
             key_cyl = f"{seg:.2f}м x {h_smuha:.2f}м"
             smuhaDict[key_cyl] = smuhaDict.get(key_cyl, 0) + 1
+            x_off += seg
 
-    st.pyplot(fig1)
-    
-    # Визначаємо межі викладки смуг на основі усіх рядків
-    x_starts = []
-    x_ends = []
-
-    for rowNum in range(full_rows):
-        pattern = patterns[rowNum % len(patterns)]
-        total_width = sum(pattern)
-        x_start = -total_width / 2
-        x_starts.append(x_start)
-        x_ends.append(x_start + total_width)
-
-    x_smuha_start = min(x_starts)
-    x_smuha_end = max(x_ends)
-    y_top = full_rows * h_smuha
-
-    # Штриховка по краях
-    left_strip = plt.Rectangle((-circumference / 2, 0), x_smuha_start + circumference / 2, y_top,
-                               facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
-    right_strip = plt.Rectangle((x_smuha_end, 0), circumference / 2 - x_smuha_end, y_top,
-                                facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
-    ax2.add_patch(left_strip)
-    ax2.add_patch(right_strip)
-
+    ax2.set_xlim(-circumference / 2, circumference / 2)
+    ax2.set_ylim(0, y_top)
+    ax2.set_xlabel('довжина поверхні (м)', fontsize=11)
+    ax2.set_ylabel('висота (м)', fontsize=11)
+    ax2.set_title("Розгорнута поверхня циліндра", fontsize=13, weight='bold')
+    ax2.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.3)
     st.pyplot(fig2)
+
 
     cum_area_bot = sum(areas_bot)
     площа_cyl = full_rows * h_smuha * Wrem
