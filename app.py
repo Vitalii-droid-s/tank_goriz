@@ -179,7 +179,8 @@ if st.button("🔢 Розрахувати"):
         y_off = rowNum * h_smuha
         for seg in pattern:
             x_start = -Wrem / 2 + sum(pattern[:pattern.index(seg)])
-            rect = plt.Rectangle((x_start, y_off), seg, h_smuha, edgecolor='black', facecolor='orange' if rowNum % 2 == 0 else 'lightgreen'
+            color = 'orange' if rowNum % 2 == 0 else 'lightgreen'
+            rect = plt.Rectangle((x_start, y_off), seg, h_smuha, edgecolor='black', facecolor=color
 
     circumference = 2 * math.pi * R
     full_rows = math.ceil(L / h_smuha))
@@ -215,8 +216,6 @@ if st.button("🔢 Розрахувати"):
     ax2.axhline(L, color='red', linestyle='--', linewidth=1, alpha=0.7)
 
     
-    
-    # Визначення шаблону викладки
     if abs(Wrem - 1) < 1e-6:
         patterns = [[1]]
     elif abs(Wrem - 2) < 1e-6:
@@ -232,24 +231,24 @@ if st.button("🔢 Розрахувати"):
     else:
         patterns = [[Wrem]]
 
+
+    # Викладка смуг
     x_start = -Wrem / 2
     for rowNum in range(full_rows):
         pattern = patterns[rowNum % len(patterns)]
         y_off = rowNum * h_smuha
         x_off = x_start
-
         visible_height = min(h_smuha, max(0.0, L - y_off))
         is_partial = (visible_height < h_smuha)
 
         for seg in pattern:
-            color = 'orange' if rowNum % 2 == 0 else 'lightgreen'
             if not is_partial:
                 rect = plt.Rectangle(
                     (x_off, y_off),
                     seg,
                     h_smuha,
                     edgecolor='black',
-                    facecolor=color,
+                    facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
                     alpha=0.7,
                     zorder=2
                 )
@@ -262,12 +261,11 @@ if st.button("🔢 Розрахувати"):
                         seg,
                         visible_height,
                         edgecolor='black',
-                        facecolor=color,
+                        facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
                         alpha=0.7,
                         zorder=2
                     )
                     ax2.add_patch(rect_used)
-
                 extra_h = h_smuha - visible_height
                 if extra_h > 0:
                     rect_extra = plt.Rectangle(
@@ -281,7 +279,6 @@ if st.button("🔢 Розрахувати"):
                         zorder=3
                     )
                     ax2.add_patch(rect_extra)
-
                 y_label = y_off + (visible_height / 2 if visible_height > 0 else 0)
 
             ax2.text(
@@ -296,6 +293,13 @@ if st.button("🔢 Розрахувати"):
             smuhaDict[key_cyl] = smuhaDict.get(key_cyl, 0) + 1
             x_off += seg
 
+    ax2.set_xlim(-circumference / 2, circumference / 2)
+    ax2.set_ylim(0, y_top)
+    ax2.set_xlabel('довжина поверхні (м)', fontsize=11)
+    ax2.set_ylabel('висота (м)', fontsize=11)
+    ax2.set_title("Розгорнута поверхня циліндра", fontsize=13, weight='bold')
+    ax2.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.3)
+    st.pyplot(fig1)
     st.pyplot(fig2)
 
 
