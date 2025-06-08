@@ -162,6 +162,11 @@ if st.button("Завантажити PDF"):
 
                            file_name="резервуар_розрахунок.pdf", mime="application/pdf")
 
+                    file_name="резервуар_розрахунок.pdf",
+            mime="application/pdf"
+        )
+
+
         st.download_button(
             label="📄 Завантажити PDF-файл",
             data=buffer.getvalue(),
