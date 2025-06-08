@@ -103,6 +103,23 @@ if st.button("🔢 Розрахувати"):
     ax2.axvline(0, color='red', linestyle='--', linewidth=1, alpha=0.7)
     ax2.axhline(L, color='red', linestyle='--', linewidth=1, alpha=0.7)
 
+    
+    if abs(Wrem - 1) < 1e-6:
+        patterns = [[1]]
+    elif abs(Wrem - 2) < 1e-6:
+        patterns = [[2]]
+    elif abs(Wrem - 3) < 1e-6:
+        patterns = [[3]]
+    elif abs(Wrem - 4) < 1e-6:
+        patterns = [[3, 1], [1, 3]]
+    elif abs(Wrem - 5) < 1e-6:
+        patterns = [[3, 2], [2, 3]]
+    elif abs(Wrem - 6) < 1e-6:
+        patterns = [[1, 3, 2], [2, 3, 1]]
+    else:
+        patterns = [[Wrem]]
+
+
     # Викладка смуг
     x_start = -Wrem / 2
     for rowNum in range(full_rows):
