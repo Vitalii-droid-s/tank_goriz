@@ -118,21 +118,11 @@ if st.sidebar.button("Розрахувати"):
     ax2.set_title("Розгорнута поверхня циліндра")
     st.pyplot(fig2)
 
-    # PDF export
-    st.subheader("⬇️ Збереження результатів у PDF")
-    if st.button("Завантажити PDF"):
-        buffer = BytesIO()
-        with PdfPages(buffer) as pdf:
-            pdf.savefig(fig1, bbox_inches='tight')
-            pdf.savefig(fig2, bbox_inches='tight')
 
-        # Третя сторінка – підсумковий текст
-        fig_text = plt.figure(figsize=(8.27, 11.69))  # A4
-        fig_text.clf()
-        ax_text = fig_text.add_subplot(111)
-        ax_text.axis('off')
-        summary_text = f"""
-ПІДСУМКИ:
+    # Зберігаємо у session_state
+    st.session_state['fig1'] = fig1
+    st.session_state['fig2'] = fig2
+    st.session_state['summary_text'] = f"""ПІДСУМКИ:
 
 Площа одного днища: {cum_area_bot:.3f} м²
 Площа обох днищ:    {2 * cum_area_bot:.3f} м²
@@ -140,11 +130,37 @@ if st.sidebar.button("Розрахувати"):
 Загальна площа:     {2 * cum_area_bot + площа_cyl:.3f} м²
 Заг. довжина швів:  {total_weld:.2f} м
 Висота ділянки:     {D:.2f} м
-Довжина окружності: {2 * math.pi * (D/2):.3f} м
-"""
+Довжина окружності: {2 * math.pi * (D/2):.3f} м"""
 
-        ax_text.text(0.01, 0.99, summary_text, fontsize=10, va='top', ha='left', wrap=True)
-        pdf.savefig(fig_text)
 
-        st.download_button("📄 Завантажити PDF-файл", data=buffer.getvalue(),
+
+    # PDF export
+    
+# Збереження в PDF
+st.subheader("⬇️ Збереження результатів у PDF")
+if st.button("Завантажити PDF"):
+    if 'fig1' in st.session_state and 'fig2' in st.session_state:
+        buffer = BytesIO()
+        with PdfPages(buffer) as pdf:
+            pdf.savefig(st.session_state['fig1'], bbox_inches='tight')
+            pdf.savefig(st.session_state['fig2'], bbox_inches='tight')
+
+            # Сторінка з підсумками
+            fig_text = plt.figure(figsize=(8.27, 11.69))
+            fig_text.clf()
+            ax_text = fig_text.add_subplot(111)
+            ax_text.axis('off')
+            ax_text.text(0.01, 0.99, st.session_state.get('summary_text', ''),
+                         fontsize=10, va='top', ha='left', wrap=True)
+            pdf.savefig(fig_text)
+
+        st.download_button(
+            label="📄 Завантажити PDF-файл",
+            data=buffer.getvalue(),
+            file_name="резервуар_розрахунок.pdf",
+            mime="application/pdf"
+        )
+    else:
+        st.warning("⚠️ Спочатку натисніть 'Розрахувати'")
+
                            file_name="резервуар_розрахунок.pdf", mime="application/pdf")
