@@ -65,8 +65,7 @@ if st.button("🔢 Розрахувати"):
                 y += dy
             x += dx
 
-        ax1.text(0, y_bot + h_smuha / 2, f"S{j}
-{areas_bot[-1]:.2f}м²", ha='center', va='center', fontsize=7)
+        ax1.text(0, y_bot + h_smuha / 2, f"S{j}\n{areas_bot[-1]:.2f}м²", ha='center', va='center', fontsize=7)
 
     ax1.set_title("Днище")
     ax1.set_xlim(-R - 0.2, R + 0.2)
@@ -133,7 +132,6 @@ if st.button("🔢 Розрахувати"):
     with col_r:
         st.markdown(right)
 
-    # PDF-збереження
     buffer = BytesIO()
     with PdfPages(buffer) as pdf:
         pdf.savefig(fig1, bbox_inches='tight')
