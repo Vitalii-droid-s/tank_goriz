@@ -103,7 +103,21 @@ if st.button("🔢 Розрахувати"):
             smuhaDict[key_cyl] = smuhaDict.get(key_cyl, 0) + 1
 
     st.pyplot(fig1)
+    
+    # Штриховка по краях циліндричної частини завжди
+    x_left = -circumference / 2
+    x_right = circumference / 2
+    y_top = full_rows * h_smuha
+
+    left_strip = plt.Rectangle((x_left, 0), (circumference - Wrem) / 2, y_top,
+                               facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
+    right_strip = plt.Rectangle((Wrem / 2, 0), (circumference - Wrem) / 2, y_top,
+                                facecolor='none', edgecolor='red', hatch='///', linewidth=0.5, alpha=0.3)
+    ax2.add_patch(left_strip)
+    ax2.add_patch(right_strip)
+
     st.pyplot(fig2)
+    
 
     cum_area_bot = sum(areas_bot)
     площа_cyl = full_rows * h_smuha * Wrem
