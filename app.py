@@ -89,6 +89,7 @@ if st.sidebar.button("Розрахувати"):
             smuhaDict[key_cyl] = smuhaDict.get(key_cyl, 0) + 1
 
     площа_cyl = full_rows * h_smuha * Wrem
+    total_area_both_bottoms = 2 * sum(areas_bot)
     заг_площа = total_area_both_bottoms + площа_cyl
     total_sheets = math.ceil(заг_площа / (6 * 1.5))
 
