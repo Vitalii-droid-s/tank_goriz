@@ -125,5 +125,26 @@ if st.sidebar.button("Розрахувати"):
         with PdfPages(buffer) as pdf:
             pdf.savefig(fig1, bbox_inches='tight')
             pdf.savefig(fig2, bbox_inches='tight')
+
+        # Третя сторінка – підсумковий текст
+        fig_text = plt.figure(figsize=(8.27, 11.69))  # A4
+        fig_text.clf()
+        ax_text = fig_text.add_subplot(111)
+        ax_text.axis('off')
+        summary_text = f"""
+ПІДСУМКИ:
+
+Площа одного днища: {cum_area_bot:.3f} м²
+Площа обох днищ:    {2 * cum_area_bot:.3f} м²
+Площа циліндра:     {площа_cyl:.3f} м²
+Загальна площа:     {2 * cum_area_bot + площа_cyl:.3f} м²
+Заг. довжина швів:  {total_weld:.2f} м
+Висота ділянки:     {D:.2f} м
+Довжина окружності: {2 * math.pi * (D/2):.3f} м
+"""
+
+        ax_text.text(0.01, 0.99, summary_text, fontsize=10, va='top', ha='left', wrap=True)
+        pdf.savefig(fig_text)
+
         st.download_button("📄 Завантажити PDF-файл", data=buffer.getvalue(),
                            file_name="резервуар_розрахунок.pdf", mime="application/pdf")
