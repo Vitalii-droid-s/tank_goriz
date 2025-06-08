@@ -179,11 +179,10 @@ if st.button("🔢 Розрахувати"):
         y_off = rowNum * h_smuha
         for seg in pattern:
             x_start = -Wrem / 2 + sum(pattern[:pattern.index(seg)])
-            rect = plt.Rectangle((x_start, y_off), seg, h_smuha,
-                                 edgecolor='black', facecolor='orange' if rowNum % 2
+            rect = plt.Rectangle((x_start, y_off), seg, h_smuha, edgecolor='black', facecolor='orange' if rowNum % 2
 
     circumference = 2 * math.pi * R
-    full_rows = math.ceil(L / h_smuha)
+    full_rows = math.ceil(L / h_smuha))
     fig2, ax2 = plt.subplots(figsize=(5, 3))
     ax2.set_aspect('auto')
 
