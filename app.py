@@ -56,6 +56,78 @@ if st.sidebar.button("Розрахувати"):
     ax1.set_ylim(-R - margin, R + margin)
     ax1.set_title("Днище резервуара")
     st.pyplot(fig1)
+
+    # Циліндрична частина
+    circumference = 2 * math.pi * R
+    full_rows = math.ceil(L / h_smuha)
+    total_height = full_rows * h_smuha
+
+    fig2, ax2 = plt.subplots(figsize=(6, 6))
+    ax2.set_aspect('auto')
+
+    ax2.add_patch(plt.Rectangle((-circumference/2, 0), circumference, L, edgecolor='black', facecolor='#d0d0d0', zorder=1))
+    ax2.axvline(0, color='red', linestyle='--', linewidth=1, alpha=0.7)
+    ax2.axhline(L, color='red', linestyle='--', linewidth=1, alpha=0.7)
+
+    if abs(Wrem - 1) < 1e-6:
+        patterns = [[1]]
+    elif abs(Wrem - 2) < 1e-6:
+        patterns = [[2]]
+    elif abs(Wrem - 3) < 1e-6:
+        patterns = [[3]]
+    elif abs(Wrem - 4) < 1e-6:
+        patterns = [[3, 1], [1, 3]]
+    elif abs(Wrem - 5) < 1e-6:
+        patterns = [[3, 2], [2, 3]]
+    elif abs(Wrem - 6) < 1e-6:
+        patterns = [[1, 3, 2], [2, 3, 1]]
+    else:
+        patterns = [[Wrem]]
+
+    for rowNum in range(full_rows):
+        pattern = patterns[rowNum % len(patterns)]
+        y_off = rowNum * h_smuha
+        x_off = -Wrem / 2
+        visible_height = min(h_smuha, max(0.0, L - y_off))
+        is_partial = (visible_height < h_smuha)
+
+        for seg in pattern:
+            if not is_partial:
+                ax2.add_patch(plt.Rectangle(
+                    (x_off, y_off), seg, h_smuha,
+                    edgecolor='black',
+                    facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
+                    alpha=0.7, zorder=2
+                ))
+                y_label = y_off + h_smuha / 2
+            else:
+                if visible_height > 0:
+                    ax2.add_patch(plt.Rectangle(
+                        (x_off, y_off), seg, visible_height,
+                        edgecolor='black',
+                        facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
+                        alpha=0.7, zorder=2
+                    ))
+                extra_h = h_smuha - visible_height
+                if extra_h > 0:
+                    ax2.add_patch(plt.Rectangle(
+                        (x_off, y_off + visible_height), seg, extra_h,
+                        edgecolor='red',
+                        facecolor='none',
+                        hatch='///',
+                        alpha=0.5, zorder=3
+                    ))
+                y_label = y_off + (visible_height / 2 if visible_height > 0 else 0)
+
+            ax2.text(x_off + seg / 2, y_label, f"{seg:.2f}м",
+                     ha='center', va='center', fontsize=8, zorder=4)
+            x_off += seg
+
+    ax2.set_xlim(-circumference / 2, circumference / 2)
+    ax2.set_ylim(0, total_height)
+    ax2.set_title("Розгорнута поверхня циліндра")
+    st.pyplot(fig2)
+
     # Побудова таблиці смуг
     circumference = 2 * math.pi * R
     full_rows = math.ceil(L / h_smuha)
