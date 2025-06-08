@@ -2,6 +2,8 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import math
 import numpy as np
+from io import BytesIO
+from matplotlib.backends.backend_pdf import PdfPages
 
 st.set_page_config(layout="wide")
 st.title("Розрахунок смуг для резервуара")
@@ -22,7 +24,7 @@ if st.sidebar.button("Розрахувати"):
     widths_bot = []
     areas_bot = []
 
-    fig1, ax1 = plt.subplots(figsize=(6, 6))
+    fig1, ax1 = plt.subplots(figsize=(4, 4))
     ax1.set_aspect('equal')
     circle = plt.Circle((0, 0), R, edgecolor='black', facecolor='lightyellow', alpha=0.3)
     ax1.add_patch(circle)
@@ -57,14 +59,13 @@ if st.sidebar.button("Розрахувати"):
     ax1.set_title("Днище резервуара")
     st.pyplot(fig1)
 
-    # Циліндрична частина
+    # === Побудова циліндра ===
     circumference = 2 * math.pi * R
     full_rows = math.ceil(L / h_smuha)
     total_height = full_rows * h_smuha
 
-    fig2, ax2 = plt.subplots(figsize=(6, 6))
+    fig2, ax2 = plt.subplots(figsize=(5, 3))
     ax2.set_aspect('auto')
-
     ax2.add_patch(plt.Rectangle((-circumference/2, 0), circumference, L, edgecolor='black', facecolor='#d0d0d0', zorder=1))
     ax2.axvline(0, color='red', linestyle='--', linewidth=1, alpha=0.7)
     ax2.axhline(L, color='red', linestyle='--', linewidth=1, alpha=0.7)
@@ -93,34 +94,23 @@ if st.sidebar.button("Розрахувати"):
 
         for seg in pattern:
             if not is_partial:
-                ax2.add_patch(plt.Rectangle(
-                    (x_off, y_off), seg, h_smuha,
-                    edgecolor='black',
-                    facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
-                    alpha=0.7, zorder=2
-                ))
+                ax2.add_patch(plt.Rectangle((x_off, y_off), seg, h_smuha,
+                                            edgecolor='black', facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
+                                            alpha=0.7, zorder=2))
                 y_label = y_off + h_smuha / 2
             else:
                 if visible_height > 0:
-                    ax2.add_patch(plt.Rectangle(
-                        (x_off, y_off), seg, visible_height,
-                        edgecolor='black',
-                        facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
-                        alpha=0.7, zorder=2
-                    ))
+                    ax2.add_patch(plt.Rectangle((x_off, y_off), seg, visible_height,
+                                                edgecolor='black', facecolor='orange' if (rowNum % 2 == 0) else 'lightgreen',
+                                                alpha=0.7, zorder=2))
                 extra_h = h_smuha - visible_height
                 if extra_h > 0:
-                    ax2.add_patch(plt.Rectangle(
-                        (x_off, y_off + visible_height), seg, extra_h,
-                        edgecolor='red',
-                        facecolor='none',
-                        hatch='///',
-                        alpha=0.5, zorder=3
-                    ))
+                    ax2.add_patch(plt.Rectangle((x_off, y_off + visible_height), seg, extra_h,
+                                                edgecolor='red', facecolor='none', hatch='///',
+                                                alpha=0.5, zorder=3))
                 y_label = y_off + (visible_height / 2 if visible_height > 0 else 0)
 
-            ax2.text(x_off + seg / 2, y_label, f"{seg:.2f}м",
-                     ha='center', va='center', fontsize=8, zorder=4)
+            ax2.text(x_off + seg / 2, y_label, f"{seg:.2f}м", ha='center', va='center', fontsize=8, zorder=4)
             x_off += seg
 
     ax2.set_xlim(-circumference / 2, circumference / 2)
@@ -128,59 +118,12 @@ if st.sidebar.button("Розрахувати"):
     ax2.set_title("Розгорнута поверхня циліндра")
     st.pyplot(fig2)
 
-    # Побудова таблиці смуг
-    circumference = 2 * math.pi * R
-    full_rows = math.ceil(L / h_smuha)
-
-    # Словник смуг
-    smuhaDict = {}
-    for j in range(1, n_bot + 1):
-        width_rnd = round(widths_bot[j - 1], 2)
-        key_bot = f"{width_rnd:>5.2f}м x {h_smuha:>3.2f}м"
-        smuhaDict[key_bot] = smuhaDict.get(key_bot, 0) + 2
-
-    if abs(Wrem - 1) < 1e-6:
-        patterns = [[1]]
-    elif abs(Wrem - 2) < 1e-6:
-        patterns = [[2]]
-    elif abs(Wrem - 3) < 1e-6:
-        patterns = [[3]]
-    elif abs(Wrem - 4) < 1e-6:
-        patterns = [[3, 1], [1, 3]]
-    elif abs(Wrem - 5) < 1e-6:
-        patterns = [[3, 2], [2, 3]]
-    elif abs(Wrem - 6) < 1e-6:
-        patterns = [[1, 3, 2], [2, 3, 1]]
-    else:
-        patterns = [[Wrem]]
-
-    for rowNum in range(full_rows):
-        pattern = patterns[rowNum % len(patterns)]
-        for seg in pattern:
-            key_cyl = f"{round(seg, 2):>5.2f}м x {h_smuha:>3.2f}м"
-            smuhaDict[key_cyl] = smuhaDict.get(key_cyl, 0) + 1
-
-    площа_cyl = full_rows * h_smuha * Wrem
-    total_area_both_bottoms = 2 * sum(areas_bot)
-    заг_площа = total_area_both_bottoms + площа_cyl
-    total_sheets = math.ceil(заг_площа / (6 * 1.5))
-
-    st.markdown("### 📋 Підсумки та кількість смуг")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"- **Площа циліндра:** `{площа_cyl:.3f} м²`")
-        st.markdown(f"- **Загальна площа:** `{заг_площа:.3f} м²`")
-        st.markdown(f"- **К-сть листів (6×1.5 м):** `{total_sheets}`")
-
-    with col2:
-        st.markdown("**Кількість смуг:**")
-        for k, v in sorted(smuhaDict.items()):
-            st.markdown(f"- `{k}` — `{v}` шт")
-    
-
-    # Підсумки
-    cum_area = sum(areas_bot)
-    total_area = cum_area * 2
-    st.subheader("Підсумки")
-    st.text(f"Площа одного днища: {cum_area:.3f} м²")
-    st.text(f"Площа обох днищ: {total_area:.3f} м²")
+    # PDF export
+    st.subheader("⬇️ Збереження результатів у PDF")
+    if st.button("Завантажити PDF"):
+        buffer = BytesIO()
+        with PdfPages(buffer) as pdf:
+            pdf.savefig(fig1, bbox_inches='tight')
+            pdf.savefig(fig2, bbox_inches='tight')
+        st.download_button("📄 Завантажити PDF-файл", data=buffer.getvalue(),
+                           file_name="резервуар_розрахунок.pdf", mime="application/pdf")
