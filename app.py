@@ -154,13 +154,17 @@ if st.button("Завантажити PDF"):
                          fontsize=10, va='top', ha='left', wrap=True)
             pdf.savefig(fig_text)
 
-        st.download_button(
-            label="📄 Завантажити PDF-файл",
-            data=buffer.getvalue(),
-            file_name="резервуар_розрахунок.pdf",
+                    file_name="резервуар_розрахунок.pdf",
             mime="application/pdf"
         )
     else:
         st.warning("⚠️ Спочатку натисніть 'Розрахувати'")
 
                            file_name="резервуар_розрахунок.pdf", mime="application/pdf")
+
+        st.download_button(
+            label="📄 Завантажити PDF-файл",
+            data=buffer.getvalue(),
+            file_name="резервуар_розрахунок.pdf",
+            mime="application/pdf"
+        )
