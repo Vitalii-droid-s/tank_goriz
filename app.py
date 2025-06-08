@@ -1,4 +1,3 @@
-
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
@@ -119,12 +118,9 @@ if st.button("🔢 Розрахувати"):
 **Кількість листів (6×1.5 м):** {total_sheets} шт
 """
 
-    right = "**Розміри смуг:**
-
-"
+    right = "**Розміри смуг:**\n"
     for k, v in sorted(smuhaDict.items()):
-        right += f"- {k}: {v} шт
-"
+        right += f"- {k}: {v} шт\n"
 
     col_l, col_r = st.columns(2)
     with col_l:
@@ -148,4 +144,3 @@ if st.button("🔢 Розрахувати"):
         file_name="резервуар_розрахунок.pdf",
         mime="application/pdf"
     )
-fix syntax error
