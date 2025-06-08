@@ -70,6 +70,48 @@ if st.button("🔢 Розрахувати"):
     ax1.set_xlim(-R - 0.2, R + 0.2)
     ax1.set_ylim(-R - 0.2, R + 0.2)
 
+    fig1, ax1 = plt.subplots(figsize=(4, 4))
+    ax1.set_aspect('equal')
+    circle = plt.Circle((0, 0), R, edgecolor='black', facecolor='lightyellow', alpha=0.3)
+    ax1.add_patch(circle)
+    ax1.axvline(0, color='red', linestyle='--')
+
+    for j in range(1, n_bot + 1):
+        y_bot = -R + (j - 1) * h_smuha
+        y_top = y_bot + h_smuha
+        y_ref = y_top if y_top <= 0 else (y_bot if y_bot >= 0 else 0.0)
+
+        width = 0.0 if abs(y_ref) >= R else 2 * math.sqrt(R ** 2 - y_ref ** 2)
+        width_rnd = round(width, 2)
+        key_bot = f"{width_rnd:.2f}м x {h_smuha:.2f}м"
+        smuhaDict[key_bot] = smuhaDict.get(key_bot, 0) + 2
+
+        widths_bot.append(width)
+        areas_bot.append(width * h_smuha)
+
+        x_left = -width / 2
+        rect = plt.Rectangle((x_left, y_bot), width, h_smuha, edgecolor='black', facecolor='skyblue', alpha=0.5)
+        ax1.add_patch(rect)
+
+        dx = dy = 0.01
+        x = x_left
+        while x < -x_left:
+            y = y_bot
+            while y < y_top:
+                xc, yc = x + dx / 2, y + dy / 2
+                if math.hypot(xc, yc) > R:
+                    patch = plt.Rectangle((x, y), dx, dy, facecolor='none', edgecolor='red',
+                                          hatch='///', linewidth=0.0, alpha=0.5)
+                    ax1.add_patch(patch)
+                y += dy
+            x += dx
+
+        ax1.text(0, y_bot + h_smuha / 2, f"S{j}\n{areas_bot[-1]:.2f}м²", ha='center', va='center', fontsize=7)
+
+    ax1.set_title("Днище")
+    ax1.set_xlim(-R - 0.2, R + 0.2)
+    ax1.set_ylim(-R - 0.2, R + 0.2)
+
     circumference = 2 * math.pi * R
     full_rows = math.ceil(L / h_smuha)
     fig2, ax2 = plt.subplots(figsize=(5, 3))
