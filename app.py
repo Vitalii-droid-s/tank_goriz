@@ -9,18 +9,21 @@ st.set_page_config(layout="wide")
 st.title("Розрахунок смуг для резервуара")
 
 # Вхідні дані
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     D = st.number_input("Діаметр резервуара, м", value=2.5, min_value=0.1, step=0.1, format="%.1f")
 with col2:
     L = st.number_input("Довжина резервуара, м", value=4.3, min_value=0.1, step=0.1, format="%.1f")
 with col3:
     Wrem = st.number_input("Ширина ремонтуємої ділянки, м", value=1.0, min_value=0.1, step=0.1, format="%.1f")
+with col4:
+    overlap_cm = st.number_input("Нахлест, см", value=5.0, min_value=0.0, step=0.5, format="%.1f")
 
 if st.button("Розрахувати"):
-    if D <= 0 or L <= 0 or Wrem <= 0:
-        st.error("Введіть, будь ласка, додатні числа для D, L та Wrem.")
+    if D <= 0 or L <= 0 or Wrem <= 0 or overlap_cm < 0:
+        st.error("Введіть, будь ласка, додатні числа для D, L та Wrem і невід'ємне значення для нахлеста.")
     else:
+        overlap = overlap_cm / 100.0  # Переводимо см в метри
         R = D / 2.0
         h_smuha = 0.5
         alpha = (Wrem / 2) / R
@@ -36,6 +39,8 @@ if st.button("Розрахувати"):
         
         fig_bot, ax_bot = plt.subplots(figsize=(6, 6))
         ax_bot.set_aspect('equal')
+        ax_bot.set_title("Днище резервуара (синій - основна смуга, червоний - нахлест)", 
+                        fontsize=14, fontweight='bold', fontfamily='Arial')
         
         # Малюємо контур кола фоном
         circle = plt.Circle(
@@ -101,6 +106,20 @@ if st.button("Розрахувати"):
             )
             ax_bot.add_patch(rect)
 
+            # Візуалізація нахлеста (червона рамка)
+            overlap_rect = plt.Rectangle(
+                (x_left - overlap/2, y_bot - overlap/2),
+                width + overlap,
+                h_smuha + overlap,
+                edgecolor='red',
+                facecolor='none',
+                linestyle='--',
+                linewidth=1,
+                alpha=0.7,
+                zorder=3
+            )
+            ax_bot.add_patch(overlap_rect)
+
             # Реальна смуга — лише в останній (верхній) смузі
             if j == n_bot - 1:
                 y_cut = -R + Hcrit  # межа, до якої потрібно
@@ -115,7 +134,7 @@ if st.button("Розрахувати"):
                         edgecolor='black',
                         facecolor='skyblue',
                         alpha=0.5,
-                        zorder=3
+                        zorder=4
                     )
                     ax_bot.add_patch(rect_real)
 
@@ -129,7 +148,7 @@ if st.button("Розрахувати"):
                         facecolor='none',
                         hatch='///',
                         alpha=0.5,
-                        zorder=4
+                        zorder=5
                     )
                     ax_bot.add_patch(rect_extra)
 
@@ -153,7 +172,7 @@ if st.button("Розрахувати"):
                             hatch='///',
                             linewidth=0.0,
                             alpha=0.5,
-                            zorder=5
+                            zorder=6
                         )
                         ax_bot.add_patch(patch)
                     y += dy
@@ -166,7 +185,7 @@ if st.button("Розрахувати"):
                 f"S{j + 1}\n{areas_bot[j]:.3f}м²",
                 ha='center', va='center',
                 fontsize=8,
-                zorder=6
+                zorder=7
             )
 
         # Площа одного днища
@@ -180,7 +199,6 @@ if st.button("Розрахувати"):
         ax_bot.set_ylim(-R - margin, R + margin)
         ax_bot.set_xlabel('x (м)', fontsize=11, fontfamily='Arial')
         ax_bot.set_ylabel('y (м)', fontsize=11, fontfamily='Arial')
-        ax_bot.set_title("Днище резервуара", fontsize=14, fontweight='bold', fontfamily='Arial')
         ax_bot.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.3)
 
         # ============================================
@@ -192,6 +210,8 @@ if st.button("Розрахувати"):
 
         fig_cyl, ax_cyl = plt.subplots(figsize=(8, 6))
         ax_cyl.set_aspect('auto')
+        ax_cyl.set_title("Розгорнута поверхня циліндра (кольори - чергування смуг, червоний - нахлест)", 
+                        fontsize=14, fontweight='bold', fontfamily='Arial')
 
         # Білий фон поза резервуаром
         фон_біла_зона = plt.Rectangle(
@@ -249,6 +269,7 @@ if st.button("Розрахувати"):
 
             for seg in pattern:
                 if not is_partial:
+                    # Основна смуга
                     rect = plt.Rectangle(
                         (x_off, y_off),
                         seg,
@@ -259,6 +280,21 @@ if st.button("Розрахувати"):
                         zorder=2
                     )
                     ax_cyl.add_patch(rect)
+                    
+                    # Візуалізація нахлеста
+                    overlap_rect = plt.Rectangle(
+                        (x_off - overlap/2, y_off - overlap/2),
+                        seg + overlap,
+                        h_smuha + overlap,
+                        edgecolor='red',
+                        facecolor='none',
+                        linestyle='--',
+                        linewidth=1,
+                        alpha=0.7,
+                        zorder=3
+                    )
+                    ax_cyl.add_patch(overlap_rect)
+                    
                     y_label = y_off + h_smuha / 2
                 else:
                     if visible_height > 0:
@@ -272,6 +308,20 @@ if st.button("Розрахувати"):
                             zorder=2
                         )
                         ax_cyl.add_patch(rect_used)
+                        
+                        # Візуалізація нахлеста для видимої частини
+                        overlap_rect = plt.Rectangle(
+                            (x_off - overlap/2, y_off - overlap/2),
+                            seg + overlap,
+                            visible_height + overlap/2,
+                            edgecolor='red',
+                            facecolor='none',
+                            linestyle='--',
+                            linewidth=1,
+                            alpha=0.7,
+                            zorder=3
+                        )
+                        ax_cyl.add_patch(overlap_rect)
 
                     extra_h = h_smuha - visible_height
                     if extra_h > 0:
@@ -283,7 +333,7 @@ if st.button("Розрахувати"):
                             facecolor='none',
                             hatch='///',
                             alpha=0.5,
-                            zorder=3
+                            zorder=4
                         )
                         ax_cyl.add_patch(rect_extra)
 
@@ -295,7 +345,7 @@ if st.button("Розрахувати"):
                     f"{seg:>5.2f}м",
                     ha='center', va='center',
                     fontsize=8,
-                    zorder=4
+                    zorder=5
                 )
                 key_cyl = f"{round(seg, 2):>5.2f}м x {h_smuha:>3.2f}м"
                 smuhaDict[key_cyl] = smuhaDict.get(key_cyl, 0) + 1
@@ -305,7 +355,6 @@ if st.button("Розрахувати"):
         ax_cyl.set_ylim(0, total_height)
         ax_cyl.set_xlabel('довжина поверхні (м)', fontsize=11, fontfamily='Arial')
         ax_cyl.set_ylabel('висота (м)', fontsize=11, fontfamily='Arial')
-        ax_cyl.set_title("Розгорнута поверхня циліндра", fontsize=14, fontweight='bold', fontfamily='Arial')
         ax_cyl.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.3)
 
         # ============================================
@@ -329,18 +378,24 @@ if st.button("Розрахувати"):
         total_weld = weld_bot + weld_cyl
 
         # Площа обох днищ + площа циліндра (за повними смугами)
-        заг_площа = total_area_both_bottoms + площа_cyl
+        заг_площа_ремонту = total_area_both_bottoms + площа_cyl
+        
+        # Розрахунок площі з урахуванням нахлеста
+        площа_днищ_з_нахлестом = sum([(w + overlap) * (h_smuha + overlap) for w in widths_bot]) * 2
+        площа_cyl_з_нахлестом = full_rows * (Wrem + overlap) * (h_smuha + overlap)
+        заг_площа_матеріалів = площа_днищ_з_нахлестом + площа_cyl_з_нахлестом
 
         довжина_окружності = circumference
         sheet_area = 6 * 1.5
-        total_sheets = math.ceil(заг_площа / sheet_area)
+        total_sheets = math.ceil(заг_площа_матеріалів / sheet_area)
 
         # — Ліва частина: основні підсумки —
         left_lines = [
             f"Площа одного днища: {cum_area_bot:.3f} м²",
             f"Площа обох днищ:    {total_area_both_bottoms:.3f} м²",
             f"Площа циліндричної частини:     {площа_cyl:.3f} м²",
-            f"Загальна площа:     {заг_площа:.3f} м²",
+            f"Загальна ремонтуєма площа:     {заг_площа_ремонту:.3f} м²",
+            f"Загальна площа матеріалів (з нахлестом {overlap_cm} см):     {заг_площа_матеріалів:.3f} м²",
             f"Заг. довжина швів:  {total_weld:.2f} м",
             f"Висота ремонтуємої частини резервуара: {Hcrit:.3f} м", 
             f"Довжина кола: {довжина_окружності:.3f} м",
@@ -353,6 +408,7 @@ if st.button("Розрахувати"):
             right_lines.append(f"{key:>12s}   {cnt:>3d} шт")
         right_lines.append("")  # порожній рядок
         right_lines.append(f"К-сть листів (6×1.5м): {total_sheets} шт")
+        right_lines.append(f"Використаний нахлест: {overlap_cm} см")
 
         # Відображення результатів
         st.markdown("## Результати розрахунків")
@@ -367,7 +423,14 @@ if st.button("Розрахувати"):
             st.markdown("### Підсумкові дані")
             st.markdown("#### Основні параметри")
             for line in left_lines:
-                st.text(line)
+                if line.startswith("Загальна ремонтуєма площа"):
+                    st.markdown(f"<p style='color:blue;'>{line}</p>", unsafe_allow_html=True)
+                elif line.startswith("Загальна площа матеріалів"):
+                    st.markdown(f"<p style='color:red;'>{line}</p>", unsafe_allow_html=True)
+                elif line.startswith("Заг. довжина швів"):
+                    st.markdown(f"<p style='color:green;'>{line}</p>", unsafe_allow_html=True)
+                else:
+                    st.text(line)
             
             st.markdown("#### Смуги матеріалу")
             for line in right_lines:
