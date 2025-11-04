@@ -164,7 +164,7 @@ if st.button("Розрахувати"):
                 ha='center', va='center', fontsize=8, zorder=7
             )
 
-        # Площа одного днища (за фактичною висотою верхньої смуги)
+        # Площа одного днища
         cum_area_bot = sum(areas_bot)
         # Площа обох днищ
         total_area_both_bottoms = 2 * cum_area_bot
@@ -178,7 +178,7 @@ if st.button("Розрахувати"):
         ax_bot.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.3)
 
         # ============================================
-        # 2) Циліндр (останній ряд повністю; верх – штрих; без верхнього нахльосту)
+        # 2) Циліндр
         # ============================================
         circumference = 2 * math.pi * R
 
@@ -245,8 +245,6 @@ if st.button("Розрахувати"):
             is_last_row = (rowNum == full_rows - 1)
 
             # Верхня межа прямокутника нахльосту:
-            # - для звичайних рядів: + overlap/2 зверху;
-            # - для останнього ряду: БЕЗ верхнього нахльосту.
             top_ov_end = y_off + visible_height + (0.0 if is_last_row else overlap/2)
             ov_y_base = max(0.0, y_off - extra_down)
             ov_h = max(0.0, top_ov_end - ov_y_base)
@@ -258,9 +256,7 @@ if st.button("Розрахувати"):
                 max_top_for_ylim = max(max_top_for_ylim, top_ov_end)
 
             for seg_idx, seg in enumerate(pattern):
-                # 1) БАЗОВА смуга:
-                #    - для останнього ряду малюємо ПОВНУ висоту h_smuha,
-                #    - для інших — лише видиму частину в межах L.
+                # 1) БАЗОВА смуга
                 base_h = h_smuha if is_last_row else visible_height
                 ax_cyl.add_patch(plt.Rectangle(
                     (x_off, y_off), seg, base_h,
@@ -284,7 +280,6 @@ if st.button("Розрахувати"):
                     ov_x = x_off
                     ov_w = seg
 
-                # НЕ малюємо верхній нахльост для останнього ряду (ov_h уже без +overlap/2)
                 if ov_h > 0:
                     ax_cyl.add_patch(plt.Rectangle(
                         (ov_x, ov_y_base), ov_w, ov_h,
@@ -308,7 +303,7 @@ if st.button("Розрахувати"):
 
                 x_off += seg
 
-        # Межі осей: показати повний останній ряд
+        # Межі осей
         ax_cyl.set_xlim(-circumference / 2, circumference / 2)
         ax_cyl.set_ylim(0, max_top_for_ylim)
         ax_cyl.set_xlabel('довжина поверхні (м)', fontsize=11, fontfamily='Arial')
@@ -319,12 +314,8 @@ if st.button("Розрахувати"):
         # 3) Підрахунок підсумкових величин і вивід
         # ============================================
 
-        # Площа циліндричної частини без нахлесту — рівно по довжині ремонту
+        # Площа циліндричної частини без нахлесту
         площа_cyl = Wrem * L
-
-        # ============================================
-        # ШВИ (циліндр + обидва днища) — ТОЧНИЙ РОЗРАХУНОК
-        # ============================================
 
         # Допоміжна: довжина хорди кола на рівні y (для днищ)
         def _chord_len(y: float) -> float:
@@ -332,13 +323,9 @@ if st.button("Розрахувати"):
                 return 0.0
             return 2.0 * math.sqrt(max(0.0, R*R - y*y))
 
-        # ------------------------------
-        # 1) ЦИЛІНДРИЧНА ЧАСТИНА
-        # ------------------------------
-        # Горизонтальні шви: нижній край + (міжрядові) + верхній край
+        # 1) Циліндрична частина — шви
         weld_h_cyl = (full_rows + 1) * Wrem
 
-        # Вертикальні шви: у кожному ряду 2 крайових + (len(pattern) - 1) внутрішніх.
         def _row_visible_height(i: int) -> float:
             y_off = i * (h_smuha - overlap)
             if y_off >= L:
@@ -356,14 +343,10 @@ if st.button("Розрахувати"):
 
         weld_cyl = weld_h_cyl + weld_v_cyl
 
-        # ------------------------------
-        # 2) ДНИЩЕ (ОДНЕ) — ЄДИНІ ШВИ
-        # ------------------------------
-        # Верхня межа ремонту днища (за Hcrit)
+        # 2) Днище — шви
         y0 = -R
-        y_top = -R + Hcrit  # тут ремонтуємо до цієї висоти
+        y_top = -R + Hcrit
 
-        # 2.1 Горизонтальні шви по хордах (без подвоєння міжсмугових):
         levels = []
         k = 0
         while True:
@@ -372,37 +355,28 @@ if st.button("Розрахувати"):
                 break
             levels.append(y_level)
             k += 1
-        # додаємо верхню межу (може не збігатися з кратним кроком)
         levels.append(y_top)
 
         weld_h_bot_one = sum(_chord_len(y) for y in levels)
 
-        # 2.2 Бічні шви (ліва+права кромки патча) — як дуги кола від y=-R до y=y_top
-        theta_top = math.asin(max(-1.0, min(1.0, y_top / R)))   # ∈ [-π/2, π/2]
+        theta_top = math.asin(max(-1.0, min(1.0, y_top / R)))
         arc_len_one_side = R * (theta_top - (-math.pi / 2))
-        weld_side_bot_one = 2.0 * arc_len_one_side  # ліва+права
+        weld_side_bot_one = 2.0 * arc_len_one_side
 
-        # Шви одного днища:
         weld_bot_one = weld_h_bot_one + weld_side_bot_one
-
-        # Обидва днища:
         weld_both_bottoms = 2.0 * weld_bot_one
 
-        # ------------------------------
-        # 3) ПІДСУМОК
-        # ------------------------------
+        # ПІДСУМОК ШВІВ
         total_weld = weld_cyl + weld_both_bottoms
 
-        # Реально ремонтуєма площа (без нахлестів): обидва днища + циліндр
+        # Реально ремонтуєма площа
         реально_ремонт_площа = total_area_both_bottoms + площа_cyl
 
-        # Фактична використана площа матеріалів (з нахлестом):
-        # без бокового нахльосту; для верхньої смуги — без верхнього нахльосту
+        # Фактична використана площа матеріалів
         площа_днищ_з_нахлестом_факт = 2 * sum(
             w * (h + (overlap/2 if idx < n_bot - 1 else 0.0))
             for idx, (w, h) in enumerate(zip(widths_bot, used_heights_bot))
         )
-
         фактична_площа_матеріалів = площа_днищ_з_нахлестом_факт + площа_cyl_з_нахлестом
 
         # Кількість листів 6×1.5 м
@@ -416,7 +390,8 @@ if st.button("Розрахувати"):
             f"Площа циліндричної частини: {площа_cyl:.3f} м²",
             f"Реально ремонтуєма площа: {реально_ремонт_площа:.3f} м²",
             f"Фактична використана площа матеріалів (з нахлестом {overlap_cm} см): {фактична_площа_матеріалів:.3f} м²",
-            f"Заг. довжина швів:  {total_weld:.2f} м",
+            # ось ТУТ зміна:
+            f"Заг. довжина швів: {total_weld:.2f} м (днища: {weld_both_bottoms:.2f} м, циліндр: {weld_cyl:.2f} м)",
             f"Висота ремонтуємої частини резервуара: {Hcrit:.3f} м",
             f"Довжина кола: {circumference:.3f} м",
         ]
