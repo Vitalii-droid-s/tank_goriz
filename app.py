@@ -224,7 +224,7 @@ if st.button("Розрахувати"):
     patterns = build_patterns(Wrem)
 
     fig_cyl, ax_cyl = plt.subplots(figsize=(8, 6))
-    ax_cyl.set_aspect("auto")
+    ax_cyl.set_aspect('equal', adjustable='box')
     ax_cyl.set_title(
         "Розгорнута поверхня циліндра (чергування смуг, червоний — зона нахлесту)",
         fontsize=13, fontweight="bold"
