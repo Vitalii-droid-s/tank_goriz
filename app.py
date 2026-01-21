@@ -7,7 +7,7 @@ from io import BytesIO
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.image as mpimg
 
-VERSION = "1.6"
+VERSION = "1.7"
 
 # -----------------------------
 # Streamlit
@@ -54,14 +54,15 @@ def build_patterns(Wrem: float):
     return [segs]
 
 def fig_to_img_array(fig, dpi=160):
-    """Конвертує matplotlib figure у RGBA array (для рівного розміру картинок у PDF)."""
+    """Конвертує matplotlib figure у RGBA array (для однакового розміру картинок у PDF)."""
     buf = BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
     buf.seek(0)
     return mpimg.imread(buf)
 
 def make_table_ax(ax, title, rows, col_labels=("Параметр", "Значення"),
-                  font_size=10, title_pad=14, scale_y=1.30, bbox=(0.0, 0.02, 1.0, 0.86)):
+                  font_size=10, title_pad=18, scale_y=1.30,
+                  bbox=(0.0, 0.01, 1.0, 0.84)):  # ✅ нижче/більше простору під заголовок
     ax.axis("off")
     ax.set_title(title, fontsize=12, fontweight="bold", pad=title_pad)
 
@@ -120,15 +121,18 @@ with col3:
 with col4:
     overlap_cm = st.number_input("Нахлест, см", value=5.0, min_value=0.0, step=0.5, format="%.1f")
 
-t1, t2, t3 = st.columns(3)
+t1, t2, t3, t4 = st.columns(4)
 with t1:
     electrode_diam_mm = st.number_input("Діаметр електрода, мм", value=3.2, min_value=1.6, step=0.2, format="%.1f")
 with t2:
-    spec_consumption = st.number_input("Питома витрата електродів, кг/м шва", value=0.25, min_value=0.01, step=0.01, format="%.2f")
+    spec_consumption = st.number_input("Питома витрата електродів, кг/м наплавлення", value=0.25, min_value=0.01, step=0.01, format="%.2f")
 with t3:
     pack_mass = st.number_input("Маса 1 пачки електродів, кг", value=2.5, min_value=0.5, step=0.5, format="%.1f")
+with t4:
+    lap_lines = st.selectbox("Ліній шва на нахлесті", options=[1, 2], index=1)
 
 include_shell_to_bottom = st.checkbox("Враховувати шви приєднання циліндричної частини до днищ", value=True)
+shell_to_bottom_lines = st.selectbox("Ліній шва на приєднанні днища до циліндра", options=[1, 2], index=0)
 
 # -----------------------------
 # Розрахунок
@@ -146,8 +150,8 @@ if st.button("Розрахувати"):
     if Wrem > circumference + 1e-9:
         st.warning(f"Wrem = {Wrem:.2f} м більша за довжину кола {circumference:.2f} м. Розгортка буде умовною.")
 
-    # ====== Днище: висота ремонту ======
-    alpha = (Wrem / 2.0) / R
+    # ====== Днище: висота ремонту (із clamp) ======
+    alpha = clamp((Wrem / 2.0) / R, 0.0, math.pi)   # ✅ фізично максимум півколо
     Hcrit = R * (1.0 - math.cos(alpha))
     n_bot = max(1, math.ceil(Hcrit / h_smuha))
     y_cut = -R + Hcrit
@@ -244,11 +248,10 @@ if st.button("Розрахувати"):
 
     patterns = build_patterns(Wrem)
 
-    fig_cyl, ax_cyl = plt.subplots(figsize=(6.2, 6.2))  # зробили квадрат, щоб у PDF був однаковий з днищем
+    fig_cyl, ax_cyl = plt.subplots(figsize=(6.2, 6.2))
     ax_cyl.set_aspect("equal", adjustable="box")
     ax_cyl.set_title("Розгорнута поверхня (масштаб 1:1, зона ремонту)", fontsize=12, fontweight="bold")
 
-    # фонова "повна" поверхня для контексту
     ax_cyl.add_patch(plt.Rectangle((-circumference/2.0, 0), circumference, L,
                                    edgecolor="black", facecolor="#d0d0d0", linewidth=1, zorder=1))
 
@@ -277,14 +280,12 @@ if st.button("Розрахувати"):
         max_top_for_ylim = max(max_top_for_ylim, (y_off + h_smuha) if is_last_row else top_ov_end)
 
         for seg_idx, seg in enumerate(pat):
-            base_h = h_smuha if is_last_row else visible_height
-
+            base_h = visible_height  # ✅ для графіка — тільки видима частина
             ax_cyl.add_patch(plt.Rectangle((x_off, y_off), seg, base_h,
                                            edgecolor="black",
                                            facecolor=("orange" if (rowNum % 2 == 0) else "lightgreen"),
                                            alpha=0.75, zorder=2))
 
-            # боковий нахлест тільки для шахматки 4..6
             if abs(Wrem - 4.0) < 1e-6 or abs(Wrem - 5.0) < 1e-6 or abs(Wrem - 6.0) < 1e-6:
                 if 0 < seg_idx < len(pat) - 1:
                     ov_x = x_off - overlap/2.0
@@ -333,30 +334,39 @@ if st.button("Розрахувати"):
     total_sheets = math.ceil(used_material_area / sheet_area)
 
     # ============================================
-    # 4) ШВИ (деталізація)
+    # 4) ШВИ (геометрія vs технологія)
     # ============================================
-    weld_cyl_h = (full_rows + 1) * Wrem
-
     def row_visible_height(i: int) -> float:
         y = i * (h_smuha - overlap)
         if y >= L:
             return 0.0
         return min(h_smuha, L - y)
 
-    weld_cyl_v = 0.0
+    # ----- ЦИЛІНДР -----
+    # Геометрія (як було): горизонтальні межі + вертикальні межі
+    weld_cyl_h_geom = (full_rows + 1) * Wrem
+
+    internal_v_geom = 0.0
     for i in range(full_rows):
         h_eff = row_visible_height(i)
         if h_eff <= 0:
             break
         pat = patterns[i % len(patterns)]
-        n_vertical = (len(pat) - 1) + 2
-        weld_cyl_v += n_vertical * h_eff
+        internal_v_geom += max(0, len(pat) - 1) * h_eff
 
-    weld_cyl_total = weld_cyl_h + weld_cyl_v
+    weld_cyl_v_geom = 2.0 * L + internal_v_geom
+    weld_cyl_geom_total = weld_cyl_h_geom + weld_cyl_v_geom
 
-    # днище 1 шт
+    # Технологія: периметр 1 лінія, внутрішні нахлести = lap_lines ліній
+    cyl_perimeter = 2.0 * Wrem + 2.0 * L
+    cyl_internal = (full_rows - 1) * Wrem + internal_v_geom
+    weld_cyl_tech_total = cyl_perimeter + lap_lines * cyl_internal
+
+    # ----- ДНИЩЕ (1 шт) -----
     y0 = -R
     y_top = -R + Hcrit
+
+    # Рівні швів по хордах
     levels = []
     k = 0
     while True:
@@ -367,29 +377,42 @@ if st.button("Розрахувати"):
         k += 1
     levels.append(y_top)
 
-    weld_bot_h_one = sum(chord_len(R, y) for y in levels)
-
+    # Геометрія: сума всіх хорд (включно з верхньою межею) + бокові дуги сектора
+    weld_bot_h_geom_one = sum(chord_len(R, y) for y in levels)  # y0 дає 0 — ок
     theta_top = math.asin(clamp(y_top / R, -1.0, 1.0))
     arc_len_one_side = R * (theta_top - (-math.pi / 2.0))
-    weld_bot_side_one = 2.0 * arc_len_one_side
+    weld_bot_side_geom_one = 2.0 * arc_len_one_side
+    weld_bot_geom_one = weld_bot_h_geom_one + weld_bot_side_geom_one
 
-    weld_bot_one = weld_bot_h_one + weld_bot_side_one
-    weld_bottoms_total = 2.0 * weld_bot_one
+    # Технологія: внутрішні стики між смугами (без верхньої межі) * lap_lines,
+    # верхня межа (периметр) = 1 лінія, бокові дуги (периметр) = 1 лінія.
+    internal_levels = levels[1:-1]  # між смугами
+    top_level = levels[-1]          # верхня межа ремонту
+    weld_bot_h_tech_one = lap_lines * sum(chord_len(R, y) for y in internal_levels) + chord_len(R, top_level)
+    weld_bot_tech_one = weld_bot_h_tech_one + weld_bot_side_geom_one
 
-    weld_shell_to_bottom = 0.0
+    weld_bottoms_geom_total = 2.0 * weld_bot_geom_one
+    weld_bottoms_tech_total = 2.0 * weld_bot_tech_one
+
+    # ----- ПРИЄДНАННЯ ДНИЩ ДО ЦИЛІНДРА -----
+    weld_shell_to_bottom_geom = 0.0
+    weld_shell_to_bottom_tech = 0.0
     if include_shell_to_bottom:
-        weld_shell_to_bottom = 2.0 * circumference
+        weld_shell_to_bottom_geom = 2.0 * circumference
+        weld_shell_to_bottom_tech = shell_to_bottom_lines * (2.0 * circumference)
 
-    weld_total = weld_cyl_total + weld_bottoms_total + weld_shell_to_bottom
+    # ----- ПІДСУМКИ -----
+    weld_geom_total = weld_cyl_geom_total + weld_bottoms_geom_total + weld_shell_to_bottom_geom
+    weld_tech_total = weld_cyl_tech_total + weld_bottoms_tech_total + weld_shell_to_bottom_tech
 
     # ============================================
-    # 5) Електроди
+    # 5) Електроди (по технологічній довжині)
     # ============================================
-    electrodes_mass = weld_total * spec_consumption
+    electrodes_mass = weld_tech_total * spec_consumption
     packs_needed = math.ceil(electrodes_mass / pack_mass)
 
     # ============================================
-    # ВЕБ-ВИВІД (ПОВЕРТАЮ ЯК БУЛО ГАРНО)
+    # ВЕБ-ВИВІД
     # ============================================
     left_lines = [
         f"Тип резервуара: {tank_type}",
@@ -404,16 +427,13 @@ if st.button("Розрахувати"):
         "",
         f"Площа 1 днища: {cum_area_bot:.3f} м²",
         f"Площа 2 днищ: {total_area_both_bottoms:.3f} м²",
-        f"Площа циліндричної частини: {area_cyl:.3f} м²",
+        f"Площа циліндричної частини (ремонт): {area_cyl:.3f} м²",
         f"Реально ремонтована площа: {real_repair_area:.3f} м²",
         f"Фактична площа матеріалу (з нахлестом): {used_material_area:.3f} м²",
         f"Оцінка листів 6×1.5 м: {total_sheets} шт",
         "",
-        f"Довжина швів (циліндр): {weld_cyl_total:.2f} м",
-        f"Довжина швів (днища): {weld_bottoms_total:.2f} м",
-        f"Приєднання днищ до циліндра: {weld_shell_to_bottom:.2f} м",
-        f"Загальна довжина швів: {weld_total:.2f} м",
-        "",
+        f"Довжина швів (геометрія): {weld_geom_total:.2f} м",
+        f"Довжина наплавлення (технологічна): {weld_tech_total:.2f} м  (нахлест: {lap_lines} лін.)",
         f"Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг  (~ {packs_needed} пач. по {pack_mass:.2f} кг)",
     ]
 
@@ -434,10 +454,10 @@ if st.button("Розрахувати"):
         for line in left_lines:
             if line.startswith("Фактична площа"):
                 st.markdown(f"<p style='color:#b00020; font-weight:600;'>{line}</p>", unsafe_allow_html=True)
-            elif line.startswith("Загальна довжина швів"):
-                st.markdown(f"<p style='color:#006400; font-weight:700;'>{line}</p>", unsafe_allow_html=True)
+            elif line.startswith("Довжина наплавлення"):
+                st.markdown(f"<p style='color:#006400; font-weight:800;'>{line}</p>", unsafe_allow_html=True)
             elif line.startswith("Електроди"):
-                st.markdown(f"<p style='color:#0033aa; font-weight:700;'>{line}</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color:#0033aa; font-weight:800;'>{line}</p>", unsafe_allow_html=True)
             else:
                 st.text(line)
 
@@ -446,14 +466,11 @@ if st.button("Розрахувати"):
             st.text(line)
 
     # ============================================
-    # PDF (без окремої 1 сторінки)
-    #   Page 1: Графіки + реквізити/ключові
-    #   Page 2: Таблиці "Ремонт" + "Шви"
-    #   Page 3: Таблиці "Матеріали" + "Електроди" + "Смуги"
+    # PDF (3 сторінки, landscape)
     # ============================================
     pdf_buffer = BytesIO()
     with PdfPages(pdf_buffer) as pdf:
-        # ---- PAGE 1 (landscape): реквізити + 2 графіки однакового розміру ----
+        # ---- PAGE 1 ----
         fig1 = plt.figure(figsize=(11.69, 8.27))
         fig1.suptitle("ЗВІТ РОЗРАХУНКУ РЕМОНТНИХ СМУГ", fontsize=16, fontweight="bold", y=0.965)
 
@@ -472,15 +489,14 @@ if st.button("Розрахувати"):
         meta_lines = [
             f"Тип резервуара: {tank_type}    |    Заводський №: {serial_no}    |    Дата ремонту: {repair_date.strftime('%d.%m.%Y')}",
             f"D = {D:.2f} м;  L = {L:.2f} м;  Wrem = {Wrem:.2f} м;  Нахлест = {overlap_cm:.1f} см",
-            f"Загальна довжина швів: {weld_total:.2f} м    |    Матеріал (факт): {used_material_area:.3f} м²    |    Листи 6×1.5 м: {total_sheets} шт",
-            f"Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг  (~ {packs_needed} пач. по {pack_mass:.2f} кг; питома витрата {spec_consumption:.2f} кг/м)",
+            f"Шви (геометрія): {weld_geom_total:.2f} м    |    Наплавлення (техн.): {weld_tech_total:.2f} м (нахлест: {lap_lines} лін.)",
+            f"Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг  (~ {packs_needed} пач. по {pack_mass:.2f} кг; {spec_consumption:.2f} кг/м)",
         ]
         ax_meta.text(0.01, 0.92, meta_lines[0], fontsize=11, fontweight="bold", va="top")
         ax_meta.text(0.01, 0.62, meta_lines[1], fontsize=10, va="top")
         ax_meta.text(0.01, 0.35, meta_lines[2], fontsize=10, va="top")
         ax_meta.text(0.01, 0.10, meta_lines[3], fontsize=10, va="top")
 
-        # однаковий розмір картинок
         img_bot = fig_to_img_array(fig_bot, dpi=160)
         img_cyl = fig_to_img_array(fig_cyl, dpi=160)
 
@@ -494,7 +510,7 @@ if st.button("Розрахувати"):
         pdf.savefig(fig1)
         plt.close(fig1)
 
-        # ---- PAGE 2 (landscape): 2 таблиці ----
+        # ---- PAGE 2 ----
         fig2 = plt.figure(figsize=(11.69, 8.27))
         fig2.suptitle("Розрахунок ремонту та зварних швів", fontsize=16, fontweight="bold", y=0.965)
 
@@ -516,21 +532,21 @@ if st.button("Розрахувати"):
         ]
 
         weld_rows = [
-            ["Циліндр: горизонтальні", fmt_m(weld_cyl_h)],
-            ["Циліндр: вертикальні", fmt_m(weld_cyl_v)],
-            ["Циліндр: разом", fmt_m(weld_cyl_total)],
-            ["Днища: разом", fmt_m(weld_bottoms_total)],
-            ["Приєднання днищ до циліндра", fmt_m(weld_shell_to_bottom)],
-            ["Загальна довжина швів", fmt_m(weld_total)],
+            ["Циліндр: шви (геометрія)", fmt_m(weld_cyl_geom_total)],
+            ["Днища: шви (геометрія)", fmt_m(weld_bottoms_geom_total)],
+            ["Приєднання днища до циліндра (геом.)", fmt_m(weld_shell_to_bottom_geom)],
+            ["Шви (геометрія): разом", fmt_m(weld_geom_total)],
+            ["Наплавлення (техн.): разом", fmt_m(weld_tech_total)],
+            ["Нахлест: ліній шва", f"{lap_lines}"],
         ]
 
-        make_table_ax(ax21, "1) Дані по ремонту", repair_rows, font_size=10, title_pad=16)
-        make_table_ax(ax22, "2) Довжина зварних швів (деталізація)", weld_rows, font_size=10, title_pad=16)
+        make_table_ax(ax21, "1) Дані по ремонту", repair_rows, font_size=10, title_pad=18)
+        make_table_ax(ax22, "2) Шви / наплавлення (підсумок)", weld_rows, font_size=10, title_pad=18)
 
         pdf.savefig(fig2)
         plt.close(fig2)
 
-        # ---- PAGE 3 (landscape): матеріали + електроди + смуги ----
+        # ---- PAGE 3 ----
         fig3 = plt.figure(figsize=(11.69, 8.27))
         fig3.suptitle("Матеріали та електроди", fontsize=16, fontweight="bold", y=0.965)
 
@@ -555,7 +571,7 @@ if st.button("Розрахувати"):
         electrodes_rows = [
             ["Діаметр електрода", f"{electrode_diam_mm:.1f} мм"],
             ["Питома витрата", f"{spec_consumption:.2f} кг/м"],
-            ["Загальна довжина швів", fmt_m(weld_total)],
+            ["Наплавлення (техн.)", fmt_m(weld_tech_total)],
             ["Потрібна маса електродів", fmt_kg(electrodes_mass)],
             ["Маса 1 пачки", fmt_kg(pack_mass)],
             ["Кількість пачок", f"{packs_needed} шт"],
@@ -563,10 +579,12 @@ if st.button("Розрахувати"):
 
         strips_rows = [[k.replace("×", "x"), f"{v} шт"] for k, v in strips_items]
 
-        make_table_ax(ax31, "3) Площі та матеріали", areas_rows, font_size=10, title_pad=16)
-        make_table_ax(ax32, "4) Електроди (оцінка)", electrodes_rows, font_size=10, title_pad=16)
+        make_table_ax(ax31, "3) Площі та матеріали", areas_rows, font_size=10, title_pad=18)
+        make_table_ax(ax32, "4) Електроди (оцінка)", electrodes_rows, font_size=10, title_pad=18)
         make_table_ax(ax33, "5) Відомість смуг (розкрій/кількість)", strips_rows,
-                      col_labels=("Розмір смуги", "К-сть"), font_size=9, title_pad=14, scale_y=1.22)
+                      col_labels=("Розмір смуги", "К-сть"),
+                      font_size=9, title_pad=16, scale_y=1.22,
+                      bbox=(0.0, 0.01, 1.0, 0.85))
 
         pdf.savefig(fig3)
         plt.close(fig3)
