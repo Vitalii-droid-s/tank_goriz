@@ -1,19 +1,23 @@
-import streamlit as st
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import math
+from dataclasses import dataclass
 from datetime import date
 from io import BytesIO
-from matplotlib.backends.backend_pdf import PdfPages
-import matplotlib.image as mpimg
+from typing import Dict, List, Tuple
 
-VERSION = "1.7"
+import matplotlib.gridspec as gridspec
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import streamlit as st
+from matplotlib.backends.backend_pdf import PdfPages
+
+VERSION = "1.7.1"
 
 # =============================
-# Matplotlib fonts (стабільно в PDF)
+# Matplotlib (стабільно в PDF)
 # =============================
 plt.rcParams["font.family"] = "DejaVu Sans"
 plt.rcParams["axes.unicode_minus"] = False
+
 
 # =============================
 # Streamlit
@@ -21,25 +25,33 @@ plt.rcParams["axes.unicode_minus"] = False
 st.set_page_config(layout="wide")
 st.title(f"Розрахунок ремонту резервуара — v{VERSION}")
 
+
 # =============================
 # Helpers
 # =============================
-def clamp(x, a, b):
+def clamp(x: float, a: float, b: float) -> float:
     return max(a, min(b, x))
 
+
 def primitive_F(R: float, y: float) -> float:
+    """Первісна для площі сегмента кола: інтеграл 2*sqrt(R^2 - y^2) dy (без множника 2).
+    Використовується як F(y2)-F(y1) для площі.
+    """
     y = clamp(y, -R, R)
     inside = max(0.0, R * R - y * y)
     return y * math.sqrt(inside) + R * R * math.asin(clamp(y / R, -1.0, 1.0))
 
+
 def chord_len(R: float, y: float) -> float:
+    """Довжина хорди на висоті y."""
     if y <= -R or y >= R:
         return 0.0
     return 2.0 * math.sqrt(max(0.0, R * R - y * y))
 
-def build_patterns(Wrem: float):
+
+def build_patterns(Wrem: float) -> List[List[float]]:
     """
-    - Wrem 4..6: "шахматка"
+    - Wrem = 4..6: "шахматка" (як у твоїй логіці)
     - інакше: сегментація на 3.0 м + залишок
     """
     eps = 1e-6
@@ -50,7 +62,7 @@ def build_patterns(Wrem: float):
     if abs(Wrem - 6.0) < eps:
         return [[1.0, 3.0, 2.0], [2.0, 3.0, 1.0]]
 
-    segs = []
+    segs: List[float] = []
     remain = Wrem
     while remain > 3.0 + 1e-9:
         segs.append(3.0)
@@ -59,19 +71,23 @@ def build_patterns(Wrem: float):
         segs.append(round(remain, 2))
     return [segs]
 
-def fig_to_img_array(fig, dpi=160):
+
+def fig_to_img_array(fig, dpi: int = 160):
     buf = BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
     buf.seek(0)
     return mpimg.imread(buf)
 
+
 def make_table_ax(
-    ax, title, rows,
-    col_labels=("Параметр", "Значення"),
-    font_size=10,
-    title_pad=16,
-    scale_y=1.25,
-    bbox=(0.0, 0.02, 1.0, 0.86)
+    ax,
+    title: str,
+    rows: List[List[str]],
+    col_labels: Tuple[str, str] = ("Параметр", "Значення"),
+    font_size: int = 10,
+    title_pad: int = 16,
+    scale_y: float = 1.25,
+    bbox: Tuple[float, float, float, float] = (0.0, 0.02, 1.0, 0.86),
 ):
     ax.axis("off")
     ax.set_title(title, fontsize=12, fontweight="bold", pad=title_pad)
@@ -82,7 +98,7 @@ def make_table_ax(
         colLoc="center",
         cellLoc="left",
         loc="center",
-        bbox=list(bbox)
+        bbox=list(bbox),
     )
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(font_size)
@@ -97,9 +113,27 @@ def make_table_ax(
 
     return tbl
 
-def fmt_m(x):  return f"{x:.2f} м"
-def fmt_m2(x): return f"{x:.3f} м²"
-def fmt_kg(x): return f"{x:.2f} кг"
+
+def fmt_m(x: float) -> str:
+    return f"{x:.2f} м"
+
+
+def fmt_m2(x: float) -> str:
+    return f"{x:.3f} м²"
+
+
+def fmt_kg(x: float) -> str:
+    return f"{x:.2f} кг"
+
+
+# =============================
+# Константи технології
+# =============================
+STRIP_H_M = 0.5  # висота/ширина смуги по “кроку” (фіксовано 0,5 м)
+SHEET_W_M = 1.5
+SHEET_L_M = 6.0
+SHEET_AREA = SHEET_W_M * SHEET_L_M
+
 
 # =============================
 # Реквізити звіту
@@ -116,13 +150,14 @@ with meta_c4:
 
 st.markdown("---")
 
+
 # =============================
 # Режим роботи
 # =============================
 mode = st.radio(
     "Режим роботи",
     ["Ремонт резервуара (повний)", "Ремонт резервуара (латочний)"],
-    horizontal=True
+    horizontal=True,
 )
 
 # =============================
@@ -130,16 +165,25 @@ mode = st.radio(
 # =============================
 e1, e2, e3 = st.columns(3)
 with e1:
-    electrode_diam_mm = st.number_input("Діаметр електрода, мм", value=3.2, min_value=1.6, step=0.2, format="%.1f")
+    electrode_diam_mm = st.number_input(
+        "Діаметр електрода, мм", value=3.2, min_value=1.6, step=0.2, format="%.1f"
+    )
 with e2:
-    spec_consumption = st.number_input("Питома витрата електродів, кг/м наплавлення", value=0.25, min_value=0.01, step=0.01, format="%.2f")
+    spec_consumption = st.number_input(
+        "Питома витрата електродів, кг/м наплавлення",
+        value=0.25,
+        min_value=0.01,
+        step=0.01,
+        format="%.2f",
+    )
 with e3:
-    pack_mass = st.number_input("Маса 1 пачки електродів, кг", value=2.5, min_value=0.5, step=0.5, format="%.1f")
+    pack_mass = st.number_input(
+        "Маса 1 пачки електродів, кг", value=2.5, min_value=0.5, step=0.5, format="%.1f"
+    )
 
-# =============================
-# Параметри для розрахунку наплавлення
-# =============================
-st.caption("Примітка: «Довжина наплавлення» = геометрична довжина швів × кількість проходів × кількість ліній шва (де задано).")
+st.caption(
+    "Примітка: «Довжина наплавлення» = геометрична довжина швів × кількість проходів × кількість ліній шва (де задано)."
+)
 p1, p2 = st.columns([1, 2])
 with p1:
     passes = st.number_input("К-сть проходів (для наплавлення)", value=1, min_value=1, step=1)
@@ -147,6 +191,7 @@ with p2:
     note_weld = st.checkbox("Показувати у звіті геометрію швів та наплавлення окремо", value=True)
 
 st.markdown("---")
+
 
 # =============================
 # 1) ПОВНИЙ РЕМОНТ
@@ -158,13 +203,15 @@ if mode == "Ремонт резервуара (повний)":
     with col2:
         L = st.number_input("Довжина резервуара, м", value=4.3, min_value=0.1, step=0.1, format="%.2f")
     with col3:
-        Wrem = st.number_input("Ширина ремонтованої ділянки (по розгортці), м", value=1.0, min_value=0.1, step=0.1, format="%.2f")
+        Wrem = st.number_input(
+            "Ширина ремонтованої ділянки (по розгортці), м", value=1.0, min_value=0.1, step=0.1, format="%.2f"
+        )
     with col4:
         overlap_cm = st.number_input("Нахлест, см", value=5.0, min_value=0.0, step=0.5, format="%.1f")
 
     include_shell_to_bottom = st.checkbox(
         "Враховувати шви приєднання циліндричної частини до днищ",
-        value=True
+        value=True,
     )
 
     if st.button("Розрахувати"):
@@ -174,20 +221,21 @@ if mode == "Ремонт резервуара (повний)":
 
         overlap = overlap_cm / 100.0
         R = D / 2.0
-        h_smuha = 0.5
         circumference = 2.0 * math.pi * R
 
         # ====== Днище: висота ремонту ======
         alpha = (Wrem / 2.0) / R
         Hcrit = R * (1.0 - math.cos(alpha))
-        n_bot = max(1, math.ceil(Hcrit / h_smuha))
+        n_bot = max(1, math.ceil(Hcrit / STRIP_H_M))
         y_cut = -R + Hcrit
 
         # =============================
         # ДНИЩЕ (графік)
         # =============================
-        widths_bot, used_heights_bot, areas_bot = [], [], []
-        smuhaDict = {}
+        widths_bot: List[float] = []
+        used_heights_bot: List[float] = []
+        areas_bot: List[float] = []
+        smuha_dict: Dict[str, int] = {}
 
         fig_bot, ax_bot = plt.subplots(figsize=(6.2, 6.2))
         ax_bot.set_aspect("equal")
@@ -198,22 +246,24 @@ if mode == "Ремонт резервуара (повний)":
 
         ax_bot.axvline(0, color="red", linestyle="--", linewidth=1, alpha=0.7)
         ax_bot.text(
-            R * 0.55, -R + Hcrit + 0.03,
+            R * 0.55,
+            -R + Hcrit + 0.03,
             f"H = {Hcrit:.3f} м",
             fontsize=9,
             bbox=dict(facecolor="white", edgecolor="black", boxstyle="round,pad=0.2"),
-            zorder=10
+            zorder=10,
         )
 
         y_bot_global = -R
         for j in range(n_bot):
-            y_bot = y_bot_global + j * h_smuha
-            y_top_nom = y_bot + h_smuha
+            y_bot = y_bot_global + j * STRIP_H_M
+            y_top_nom = y_bot + STRIP_H_M
 
-            real_h = h_smuha
+            real_h = STRIP_H_M
             if j == n_bot - 1:
-                real_h = max(0.0, min(y_cut - y_bot, h_smuha))
+                real_h = max(0.0, min(y_cut - y_bot, STRIP_H_M))
 
+            # де міряти ширину смуги
             if y_top_nom <= 0:
                 y_ref = y_top_nom
             elif y_bot >= 0:
@@ -229,30 +279,54 @@ if mode == "Ремонт резервуара (повний)":
             area_strip = primitive_F(R, y_top_clip) - primitive_F(R, y_bot)
             areas_bot.append(area_strip)
 
-            key_bot = f"{round(width, 2):>5.2f}м × {h_smuha:>3.2f}м"
-            smuhaDict[key_bot] = smuhaDict.get(key_bot, 0) + 2
+            key_bot = f"{round(width, 2):>5.2f}м × {STRIP_H_M:>3.2f}м"
+            smuha_dict[key_bot] = smuha_dict.get(key_bot, 0) + 2  # два днища
 
             x_left = -width / 2.0
-            ax_bot.add_patch(plt.Rectangle((x_left, y_bot), width, h_smuha,
-                                           edgecolor="black", facecolor="skyblue", alpha=0.45, zorder=2))
 
-            ov_h = h_smuha + (overlap / 2.0 if j < n_bot - 1 else 0.0)
-            ax_bot.add_patch(plt.Rectangle((x_left, y_bot), width, ov_h,
-                                           edgecolor="red", facecolor="none", linestyle="--",
-                                           linewidth=1, alpha=0.7, zorder=3))
+            # контур смуги
+            ax_bot.add_patch(
+                plt.Rectangle((x_left, y_bot), width, STRIP_H_M, edgecolor="black", facecolor="skyblue", alpha=0.45, zorder=2)
+            )
 
+            # зона нахлесту (візуал)
+            ov_h = STRIP_H_M + (overlap / 2.0 if j < n_bot - 1 else 0.0)
+            ax_bot.add_patch(
+                plt.Rectangle(
+                    (x_left, y_bot),
+                    width,
+                    ov_h,
+                    edgecolor="red",
+                    facecolor="none",
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                    zorder=3,
+                )
+            )
+
+            # “реальна” частина останньої смуги
             if real_h > 0:
-                ax_bot.add_patch(plt.Rectangle((x_left, y_bot), width, real_h,
-                                               edgecolor="black", facecolor="skyblue", alpha=0.55, zorder=4))
+                ax_bot.add_patch(
+                    plt.Rectangle((x_left, y_bot), width, real_h, edgecolor="black", facecolor="skyblue", alpha=0.55, zorder=4)
+                )
 
-            extra_h = h_smuha - real_h
+            extra_h = STRIP_H_M - real_h
             if extra_h > 1e-9:
-                ax_bot.add_patch(plt.Rectangle((x_left, y_bot + real_h), width, extra_h,
-                                               edgecolor="red", facecolor="none", hatch="///",
-                                               alpha=0.5, zorder=5))
+                ax_bot.add_patch(
+                    plt.Rectangle(
+                        (x_left, y_bot + real_h),
+                        width,
+                        extra_h,
+                        edgecolor="red",
+                        facecolor="none",
+                        hatch="///",
+                        alpha=0.5,
+                        zorder=5,
+                    )
+                )
 
-            ax_bot.text(0, y_bot + h_smuha / 2.0, f"S{j + 1}\n{area_strip:.3f} м²",
-                        ha="center", va="center", fontsize=8, zorder=7)
+            ax_bot.text(0, y_bot + STRIP_H_M / 2.0, f"S{j + 1}\n{area_strip:.3f} м²", ha="center", va="center", fontsize=8, zorder=7)
 
         cum_area_bot = sum(areas_bot)
         total_area_both_bottoms = 2.0 * cum_area_bot
@@ -268,10 +342,10 @@ if mode == "Ремонт резервуара (повний)":
         # ЦИЛІНДР (графік 1:1 по зоні ремонту)
         # =============================
         full_rows = 1
-        covered_height = h_smuha
+        covered_height = STRIP_H_M
         while covered_height + 1e-9 < L:
             full_rows += 1
-            covered_height += (h_smuha - overlap)
+            covered_height += (STRIP_H_M - overlap)
 
         patterns = build_patterns(Wrem)
 
@@ -279,9 +353,9 @@ if mode == "Ремонт резервуара (повний)":
         ax_cyl.set_aspect("equal", adjustable="box")
         ax_cyl.set_title("Розгорнута поверхня (масштаб 1:1, зона ремонту)", fontsize=12, fontweight="bold")
 
-        ax_cyl.add_patch(plt.Rectangle((-circumference / 2.0, 0), circumference, L,
-                                       edgecolor="black", facecolor="#d0d0d0", linewidth=1, zorder=1))
-
+        ax_cyl.add_patch(
+            plt.Rectangle((-circumference / 2.0, 0), circumference, L, edgecolor="black", facecolor="#d0d0d0", linewidth=1, zorder=1)
+        )
         ax_cyl.axvline(0, color="red", linestyle="--", linewidth=1, alpha=0.7)
         ax_cyl.axhline(L, color="red", linestyle="--", linewidth=1, alpha=0.7)
 
@@ -289,55 +363,69 @@ if mode == "Ремонт резервуара (повний)":
         area_cyl_with_overlap = 0.0
         max_top_for_ylim = L
 
-        for rowNum in range(full_rows):
-            y_off = rowNum * (h_smuha - overlap)
+        is_chess = abs(Wrem - 4.0) < 1e-6 or abs(Wrem - 5.0) < 1e-6 or abs(Wrem - 6.0) < 1e-6
+
+        for row_num in range(full_rows):
+            y_off = row_num * (STRIP_H_M - overlap)
             if y_off >= L + overlap / 2.0:
                 break
 
-            pat = patterns[rowNum % len(patterns)]
+            pat = patterns[row_num % len(patterns)]
             x_off = x_start
 
-            visible_height = max(0.0, min(h_smuha, L - y_off))
+            visible_height = max(0.0, min(STRIP_H_M, L - y_off))
             extra_down = min(overlap / 2.0, max(0.0, y_off))
-            is_last_row = (rowNum == full_rows - 1)
+            is_last_row = (row_num == full_rows - 1)
 
             top_ov_end = y_off + visible_height + (0.0 if is_last_row else overlap / 2.0)
             ov_y_base = max(0.0, y_off - extra_down)
             ov_h = max(0.0, top_ov_end - ov_y_base)
-            max_top_for_ylim = max(max_top_for_ylim, (y_off + h_smuha) if is_last_row else top_ov_end)
+
+            max_top_for_ylim = max(max_top_for_ylim, (y_off + STRIP_H_M) if is_last_row else top_ov_end)
 
             for seg_idx, seg in enumerate(pat):
-                base_h = h_smuha if is_last_row else visible_height
+                base_h = STRIP_H_M if is_last_row else visible_height
 
-                ax_cyl.add_patch(plt.Rectangle((x_off, y_off), seg, base_h,
-                                               edgecolor="black",
-                                               facecolor=("orange" if (rowNum % 2 == 0) else "lightgreen"),
-                                               alpha=0.75, zorder=2))
+                ax_cyl.add_patch(
+                    plt.Rectangle(
+                        (x_off, y_off),
+                        seg,
+                        base_h,
+                        edgecolor="black",
+                        facecolor=("orange" if (row_num % 2 == 0) else "lightgreen"),
+                        alpha=0.75,
+                        zorder=2,
+                    )
+                )
 
-                # боковий нахлест тільки для шахматки 4..6
-                if abs(Wrem - 4.0) < 1e-6 or abs(Wrem - 5.0) < 1e-6 or abs(Wrem - 6.0) < 1e-6:
-                    if 0 < seg_idx < len(pat) - 1:
-                        ov_x = x_off - overlap / 2.0
-                        ov_w = seg + overlap
-                    else:
-                        ov_x = x_off
-                        ov_w = seg
+                # боковий нахлест тільки для шахматки 4..6 (як у тебе)
+                if is_chess and 0 < seg_idx < len(pat) - 1:
+                    ov_x = x_off - overlap / 2.0
+                    ov_w = seg + overlap
                 else:
                     ov_x = x_off
                     ov_w = seg
 
                 if ov_h > 0:
-                    ax_cyl.add_patch(plt.Rectangle((ov_x, ov_y_base), ov_w, ov_h,
-                                                   edgecolor="red", facecolor="none",
-                                                   linestyle="--", linewidth=1, alpha=0.7, zorder=3))
+                    ax_cyl.add_patch(
+                        plt.Rectangle(
+                            (ov_x, ov_y_base),
+                            ov_w,
+                            ov_h,
+                            edgecolor="red",
+                            facecolor="none",
+                            linestyle="--",
+                            linewidth=1,
+                            alpha=0.7,
+                            zorder=3,
+                        )
+                    )
+                    area_cyl_with_overlap += ov_w * ov_h
 
-                area_cyl_with_overlap += ov_w * ov_h
+                ax_cyl.text(x_off + seg / 2.0, y_off + base_h / 2.0, f"{seg:.2f} м", ha="center", va="center", fontsize=9, zorder=5)
 
-                ax_cyl.text(x_off + seg / 2.0, y_off + base_h / 2.0, f"{seg:.2f} м",
-                            ha="center", va="center", fontsize=9, zorder=5)
-
-                key_cyl = f"{round(seg, 2):>5.2f}м × {h_smuha:>3.2f}м"
-                smuhaDict[key_cyl] = smuhaDict.get(key_cyl, 0) + 1
+                key_cyl = f"{round(seg, 2):>5.2f}м × {STRIP_H_M:>3.2f}м"
+                smuha_dict[key_cyl] = smuha_dict.get(key_cyl, 0) + 1
 
                 x_off += seg
 
@@ -358,8 +446,7 @@ if mode == "Ремонт резервуара (повний)":
             for idx, (w, h) in enumerate(zip(widths_bot, used_heights_bot))
         )
         used_material_area = area_bottoms_with_overlap_fact + area_cyl_with_overlap
-        sheet_area = 6.0 * 1.5
-        total_sheets = math.ceil(used_material_area / sheet_area)
+        total_sheets = math.ceil(used_material_area / SHEET_AREA)
 
         # =============================
         # ШВИ (геометрія)
@@ -367,10 +454,10 @@ if mode == "Ремонт резервуара (повний)":
         weld_cyl_h = (full_rows + 1) * Wrem
 
         def row_visible_height(i: int) -> float:
-            y = i * (h_smuha - overlap)
+            y = i * (STRIP_H_M - overlap)
             if y >= L:
                 return 0.0
-            return min(h_smuha, L - y)
+            return min(STRIP_H_M, L - y)
 
         weld_cyl_v = 0.0
         for i in range(full_rows):
@@ -378,7 +465,7 @@ if mode == "Ремонт резервуара (повний)":
             if h_eff <= 0:
                 break
             pat = patterns[i % len(patterns)]
-            n_vertical = (len(pat) - 1) + 2
+            n_vertical = (len(pat) - 1) + 2  # стики + 2 крайові
             weld_cyl_v += n_vertical * h_eff
 
         weld_cyl_total = weld_cyl_h + weld_cyl_v
@@ -386,10 +473,10 @@ if mode == "Ремонт резервуара (повний)":
         # днище 1 шт
         y0 = -R
         y_top = -R + Hcrit
-        levels = []
+        levels: List[float] = []
         k = 0
         while True:
-            y_level = y0 + k * h_smuha
+            y_level = y0 + k * STRIP_H_M
             if y_level >= y_top - 1e-9:
                 break
             levels.append(y_level)
@@ -450,16 +537,13 @@ if mode == "Ремонт резервуара (повний)":
                 "",
             ]
         else:
-            left_lines += [
-                f"Загальна довжина швів: {weld_geom_total:.2f} м",
-                "",
-            ]
+            left_lines += [f"Загальна довжина швів: {weld_geom_total:.2f} м", ""]
 
         left_lines += [
             f"Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг  (~ {packs_needed} пач. по {pack_mass:.2f} кг)",
         ]
 
-        strips_items = sorted(smuhaDict.items(), key=lambda x: x[0])
+        strips_items = sorted(smuha_dict.items(), key=lambda x: x[0])
         right_lines = ["Розмір смуги           К-сть"]
         for k, v in strips_items:
             right_lines.append(f"{k:>16s}   {v:>3d} шт")
@@ -497,10 +581,16 @@ if mode == "Ремонт резервуара (повний)":
             fig1.suptitle("ЗВІТ РОЗРАХУНКУ РЕМОНТУ (ПОВНИЙ)", fontsize=16, fontweight="bold", y=0.965)
 
             gs1 = gridspec.GridSpec(
-                2, 2, figure=fig1,
+                2,
+                2,
+                figure=fig1,
                 height_ratios=[0.33, 0.67],
-                wspace=0.10, hspace=0.20,
-                left=0.04, right=0.98, top=0.90, bottom=0.06
+                wspace=0.10,
+                hspace=0.20,
+                left=0.04,
+                right=0.98,
+                top=0.90,
+                bottom=0.06,
             )
             ax_meta = fig1.add_subplot(gs1[0, :])
             ax_a = fig1.add_subplot(gs1[1, 0])
@@ -522,10 +612,12 @@ if mode == "Ремонт резервуара (повний)":
 
             img_bot = fig_to_img_array(fig_bot, dpi=160)
             img_cyl = fig_to_img_array(fig_cyl, dpi=160)
-            ax_a.imshow(img_bot); ax_b.imshow(img_cyl)
+            ax_a.imshow(img_bot)
+            ax_b.imshow(img_cyl)
             ax_a.set_title("Рис. 1 — Схема смуг на днищі", fontsize=11, fontweight="bold", pad=8)
             ax_b.set_title("Рис. 2 — Розгортка циліндра (масштаб 1:1)", fontsize=11, fontweight="bold", pad=8)
-            ax_a.axis("off"); ax_b.axis("off")
+            ax_a.axis("off")
+            ax_b.axis("off")
 
             pdf.savefig(fig1)
             plt.close(fig1)
@@ -550,6 +642,7 @@ if mode == "Ремонт резервуара (повний)":
                 ["Нахлест", f"{overlap_cm:.1f} см"],
                 ["Висота ремонту днища H", fmt_m(Hcrit)],
                 ["Кількість рядів на циліндрі", f"{full_rows} шт"],
+                ["Висота смуги (фікс.)", fmt_m(STRIP_H_M)],
             ]
 
             weld_rows = [
@@ -574,10 +667,16 @@ if mode == "Ремонт резервуара (повний)":
             fig3.suptitle("Матеріали та електроди", fontsize=16, fontweight="bold", y=0.965)
 
             gs3 = gridspec.GridSpec(
-                2, 2, figure=fig3,
+                2,
+                2,
+                figure=fig3,
                 height_ratios=[1.0, 1.05],
-                wspace=0.12, hspace=0.28,
-                left=0.04, right=0.98, top=0.90, bottom=0.06
+                wspace=0.12,
+                hspace=0.28,
+                left=0.04,
+                right=0.98,
+                top=0.90,
+                bottom=0.06,
             )
             ax31 = fig3.add_subplot(gs3[0, 0])
             ax32 = fig3.add_subplot(gs3[0, 1])
@@ -606,12 +705,13 @@ if mode == "Ремонт резервуара (повний)":
             make_table_ax(ax31, "3) Площі та матеріали", areas_rows, font_size=10, title_pad=16)
             make_table_ax(ax32, "4) Електроди (оцінка)", electrodes_rows, font_size=10, title_pad=16)
             make_table_ax(
-                ax33, "5) Відомість смуг (розкрій/кількість)",
+                ax33,
+                "5) Відомість смуг (розкрій/кількість)",
                 strips_rows,
                 col_labels=("Розмір смуги", "К-сть"),
                 font_size=9,
                 title_pad=14,
-                scale_y=1.20
+                scale_y=1.20,
             )
 
             pdf.savefig(fig3)
@@ -623,7 +723,7 @@ if mode == "Ремонт резервуара (повний)":
             label="Зберегти звіт як PDF",
             data=pdf_buffer.getvalue(),
             file_name="резервуар_звіт.pdf",
-            mime="application/pdf"
+            mime="application/pdf",
         )
 
         cpng1, cpng2 = st.columns(2)
@@ -639,22 +739,19 @@ if mode == "Ремонт резервуара (повний)":
         plt.close(fig_bot)
         plt.close(fig_cyl)
 
+
 # =============================
 # 2) ЛАТОЧНИЙ РЕМОНТ
 # =============================
 else:
     st.subheader("Латочний ремонт (прямокутні латки)")
 
-    # ✅ фіксована ширина смуги як у повному ремонті: 500 мм
+    # ✅ фіксована ширина смуги (крок розкрою) = 0,5 м
     STRIP_W_M = 0.5
 
     a1, a2, a3, a4 = st.columns(4)
     with a1:
-        cut_dir = st.selectbox(
-            "Різати латку смугами 0,5 м по",
-            ["Висоті H", "Ширині W"],  # обираєш, як тобі потрібно технологічно
-            index=0
-        )
+        cut_dir = st.selectbox("Різати латку смугами 0,5 м по", ["Висоті H", "Ширині W"], index=0)
     with a2:
         overlap_cm = st.number_input("Нахлест між смугами, см", value=5.0, min_value=0.0, step=0.5, format="%.1f")
     with a3:
@@ -666,11 +763,13 @@ else:
     with b1:
         patches_count = st.number_input("Кількість латок", value=1, min_value=1, step=1)
     with b2:
-        allowance_mm = st.number_input("Припуск по периметру (додається з кожного боку), мм", value=0.0, min_value=0.0, step=5.0, format="%.0f")
+        allowance_mm = st.number_input(
+            "Припуск по периметру (додається з кожного боку), мм", value=0.0, min_value=0.0, step=5.0, format="%.0f"
+        )
 
     st.caption("Розмір латки вводиться у мм. Латку розкроює на смуги шириною 0,5 м (500 мм) по вибраній стороні.")
 
-    patches = []
+    patches: List[Tuple[float, float]] = []
     cols = st.columns(2)
     for i in range(int(patches_count)):
         with cols[i % 2]:
@@ -682,9 +781,9 @@ else:
     if st.button("Розрахувати"):
         overlap = overlap_cm / 100.0
 
-        strips_dict = {}
-        patch_rows = []
-        strips_rows = []
+        strips_dict: Dict[str, int] = {}
+        patch_rows: List[List[str]] = []
+        strips_rows: List[List[str]] = []
 
         total_area = 0.0
         total_perimeter_geom = 0.0
@@ -700,11 +799,11 @@ else:
             per_i = 2.0 * (W + H)
             total_perimeter_geom += per_i
 
-            # ✅ визначаємо “розмір по різу” та “довжину смуги”
+            # “розмір по різу” та “довжина смуги”
             if cut_dir == "Висоті H":
                 cut_len = H          # по чому “крок 0,5”
                 strip_len = W        # довжина смуги
-                strip_label_len = W
+                strip_label_len = W  # виводимо як довжину
             else:  # "Ширині W"
                 cut_len = W
                 strip_len = H
@@ -712,11 +811,11 @@ else:
 
             n_strips = max(1, math.ceil(cut_len / STRIP_W_M))
 
-            # ✅ стики між смугами: (n-1) * довжина смуги
+            # стики між смугами: (n-1) * довжина смуги
             join_i = (n_strips - 1) * strip_len
             total_join_geom += join_i
 
-            # ✅ запис смуг у відомість: (довжина смуги) × (фактична ширина по кроку)
+            # відомість смуг: (довжина смуги) × (фактична ширина по кроку)
             for s in range(n_strips):
                 if s < n_strips - 1:
                     seg_w = STRIP_W_M
@@ -725,18 +824,19 @@ else:
                     if seg_w < 1e-9:
                         seg_w = STRIP_W_M
 
-                # смуга: "довжина × ширина(по 0,5)"
                 key = f"{strip_label_len:.2f}м × {seg_w:.2f}м"
                 strips_dict[key] = strips_dict.get(key, 0) + 1
 
-            patch_rows.append([
-                f"Латка #{idx}",
-                f"W={W:.2f} м; H={H:.2f} м",
-                fmt_m2(area_i),
-                fmt_m(per_i),
-                f"{n_strips} смуг (0,50 м)",
-                fmt_m(join_i)
-            ])
+            patch_rows.append(
+                [
+                    f"Латка #{idx}",
+                    f"W={W:.2f} м; H={H:.2f} м",
+                    fmt_m2(area_i),
+                    fmt_m(per_i),
+                    f"{n_strips} смуг (0,50 м)",
+                    fmt_m(join_i),
+                ]
+            )
 
         weld_geom_perimeter = total_perimeter_geom
         weld_geom_joins = total_join_geom
@@ -746,12 +846,10 @@ else:
         dep_joins = weld_geom_joins * seam_lines_on_lap * passes
         weld_deposition_total = dep_perimeter + dep_joins
 
-        # ✅ додаткова площа перекриття від нахлесту між смугами:
+        # додаткова площа перекриття від нахлесту між смугами:
         overlap_area = total_join_geom * overlap
         used_material_area = total_area + overlap_area
-
-        sheet_area = 6.0 * 1.5
-        total_sheets = math.ceil(used_material_area / sheet_area)
+        total_sheets = math.ceil(used_material_area / SHEET_AREA)
 
         electrodes_mass = weld_deposition_total * spec_consumption
         packs_needed = math.ceil(electrodes_mass / pack_mass)
@@ -759,9 +857,6 @@ else:
         strips_items = sorted(strips_dict.items(), key=lambda x: x[0])
         for k, v in strips_items:
             strips_rows.append([k.replace("×", "x"), f"{v} шт"])
-
-        # далі твій WEB/PDF вивід можна лишати як є (тільки поля "Висота смуги" прибрати або замінити на 0,5 м)
-
 
         # =============================
         # WEB ВИВІД
@@ -778,19 +873,30 @@ else:
             st.text("")
             st.text(f"Площа латок (геометрія): {total_area:.3f} м²")
             st.text(f"Додаткова площа перекриття (нахлест {overlap_cm:.1f} см): {overlap_area:.3f} м²")
-            st.markdown(f"<p style='color:#b00020; font-weight:700;'>Фактична площа матеріалу: {used_material_area:.3f} м²</p>", unsafe_allow_html=True)
+            st.markdown(
+                f"<p style='color:#b00020; font-weight:700;'>Фактична площа матеріалу: {used_material_area:.3f} м²</p>",
+                unsafe_allow_html=True,
+            )
             st.text(f"Оцінка листів 6×1.5 м: {total_sheets} шт")
             st.text("")
 
             if note_weld:
                 st.text(f"Шви (геометрія): {weld_geom_total:.2f} м")
-                st.markdown(f"<p style='color:#006400; font-weight:700;'>Наплавлення: {weld_deposition_total:.2f} м</p>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<p style='color:#006400; font-weight:700;'>Наплавлення: {weld_deposition_total:.2f} м</p>",
+                    unsafe_allow_html=True,
+                )
                 st.text(f"  • периметр: {weld_geom_perimeter:.2f} м; стики смуг: {weld_geom_joins:.2f} м")
-                st.text(f"  • ліній по периметру: {seam_lines_perimeter}; ліній на нахлесті: {seam_lines_on_lap}; проходів: {passes}")
+                st.text(
+                    f"  • ліній по периметру: {seam_lines_perimeter}; ліній на нахлесті: {seam_lines_on_lap}; проходів: {passes}"
+                )
             else:
                 st.text(f"Загальна довжина швів: {weld_geom_total:.2f} м")
 
-            st.markdown(f"<p style='color:#0033aa; font-weight:800;'>Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг (~ {packs_needed} пач. по {pack_mass:.2f} кг)</p>", unsafe_allow_html=True)
+            st.markdown(
+                f"<p style='color:#0033aa; font-weight:800;'>Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг (~ {packs_needed} пач. по {pack_mass:.2f} кг)</p>",
+                unsafe_allow_html=True,
+            )
 
         with c2:
             st.markdown("### Відомість латок")
@@ -803,13 +909,13 @@ else:
                     "Смуги": [r[4] for r in patch_rows],
                     "Стики смуг": [r[5] for r in patch_rows],
                 },
-                use_container_width=True
+                use_container_width=True,
             )
 
             st.markdown("### Відомість смуг (матеріал)")
             st.dataframe(
                 {"Розмір смуги": [r[0] for r in strips_rows], "К-сть": [r[1] for r in strips_rows]},
-                use_container_width=True
+                use_container_width=True,
             )
 
         # =============================
@@ -830,7 +936,7 @@ else:
                 ["ID резервуара", tank_id],
                 ["Заводський №", serial_no],
                 ["Дата ремонту", repair_date.strftime("%d.%m.%Y")],
-                ["Висота смуги", fmt_m(strip_h_m)],
+                ["Ширина смуги (фікс.)", fmt_m(STRIP_W_M)],
                 ["Нахлест між смугами", f"{overlap_cm:.1f} см"],
                 ["Ліній шва по периметру", f"{seam_lines_perimeter}"],
                 ["Ліній шва на нахлесті", f"{seam_lines_on_lap}"],
@@ -865,10 +971,18 @@ else:
             fig2 = plt.figure(figsize=(11.69, 8.27))
             fig2.suptitle("Відомості (латки та смуги матеріалу)", fontsize=16, fontweight="bold", y=0.965)
 
-            gs2 = gridspec.GridSpec(2, 2, figure=fig2,
-                                    height_ratios=[1.0, 1.1],
-                                    wspace=0.12, hspace=0.30,
-                                    left=0.04, right=0.98, top=0.90, bottom=0.06)
+            gs2 = gridspec.GridSpec(
+                2,
+                2,
+                figure=fig2,
+                height_ratios=[1.0, 1.1],
+                wspace=0.12,
+                hspace=0.30,
+                left=0.04,
+                right=0.98,
+                top=0.90,
+                bottom=0.06,
+            )
 
             ax21 = fig2.add_subplot(gs2[0, :])
             ax22 = fig2.add_subplot(gs2[1, :])
@@ -881,7 +995,7 @@ else:
                 col_labels=("Латка", "Розмір", "Площа", "Периметр", "Смуги", "Стики смуг"),
                 font_size=9,
                 title_pad=14,
-                scale_y=1.15
+                scale_y=1.15,
             )
 
             make_table_ax(
@@ -891,7 +1005,7 @@ else:
                 col_labels=("Розмір смуги", "К-сть"),
                 font_size=9,
                 title_pad=14,
-                scale_y=1.20
+                scale_y=1.20,
             )
 
             pdf.savefig(fig2)
@@ -903,5 +1017,5 @@ else:
             label="Зберегти звіт як PDF",
             data=pdf_buffer.getvalue(),
             file_name="резервуар_звіт_латки.pdf",
-            mime="application/pdf"
+            mime="application/pdf",
         )
