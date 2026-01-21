@@ -645,10 +645,16 @@ if mode == "Ремонт резервуара (повний)":
 else:
     st.subheader("Латочний ремонт (прямокутні латки)")
 
-    # неактивні поля "повного" ремонту — просто не показуємо їх
+    # ✅ фіксована ширина смуги як у повному ремонті: 500 мм
+    STRIP_W_M = 0.5
+
     a1, a2, a3, a4 = st.columns(4)
     with a1:
-        strip_h_m = st.number_input("Висота смуги (фіксована технологічна), м", value=0.5, min_value=0.1, step=0.1, format="%.2f")
+        cut_dir = st.selectbox(
+            "Різати латку смугами 0,5 м по",
+            ["Висоті H", "Ширині W"],  # обираєш, як тобі потрібно технологічно
+            index=0
+        )
     with a2:
         overlap_cm = st.number_input("Нахлест між смугами, см", value=5.0, min_value=0.0, step=0.5, format="%.1f")
     with a3:
@@ -662,9 +668,8 @@ else:
     with b2:
         allowance_mm = st.number_input("Припуск по периметру (додається з кожного боку), мм", value=0.0, min_value=0.0, step=5.0, format="%.0f")
 
-    st.caption("Розмір латки вводиться у мм. Програма розкладає латку на смуги висотою 0,5 м (або заданою вище).")
+    st.caption("Розмір латки вводиться у мм. Латку розкроює на смуги шириною 0,5 м (500 мм) по вибраній стороні.")
 
-    # Динамічні поля латок
     patches = []
     cols = st.columns(2)
     for i in range(int(patches_count)):
@@ -677,46 +682,51 @@ else:
     if st.button("Розрахувати"):
         overlap = overlap_cm / 100.0
 
-        # Відомість смуг
-        strips_dict = {}  # "W×0.5" -> count
-        patch_rows = []   # для таблиці латок
-        strips_rows = []  # для таблиці смуг
+        strips_dict = {}
+        patch_rows = []
+        strips_rows = []
 
-        # Площі та шви
         total_area = 0.0
         total_perimeter_geom = 0.0
-        total_join_geom = 0.0
+        total_join_geom = 0.0  # сумарна довжина стиків смуг (геометрія)
 
         for idx, (w_mm, h_mm) in enumerate(patches, start=1):
-            # з припуском
             W = (w_mm + 2.0 * allowance_mm) / 1000.0
             H = (h_mm + 2.0 * allowance_mm) / 1000.0
 
-            # площа
             area_i = W * H
             total_area += area_i
 
-            # периметр (геометрія)
             per_i = 2.0 * (W + H)
             total_perimeter_geom += per_i
 
-            # смуги по висоті
-            n_strips = max(1, math.ceil(H / strip_h_m))
-            # стики між смугами (геометрія)
-            join_i = (n_strips - 1) * W
+            # ✅ визначаємо “розмір по різу” та “довжину смуги”
+            if cut_dir == "Висоті H":
+                cut_len = H          # по чому “крок 0,5”
+                strip_len = W        # довжина смуги
+                strip_label_len = W
+            else:  # "Ширині W"
+                cut_len = W
+                strip_len = H
+                strip_label_len = H
+
+            n_strips = max(1, math.ceil(cut_len / STRIP_W_M))
+
+            # ✅ стики між смугами: (n-1) * довжина смуги
+            join_i = (n_strips - 1) * strip_len
             total_join_geom += join_i
 
-            # оновити словник смуг
-            # остання смуга може бути менша
+            # ✅ запис смуг у відомість: (довжина смуги) × (фактична ширина по кроку)
             for s in range(n_strips):
                 if s < n_strips - 1:
-                    h_seg = strip_h_m
+                    seg_w = STRIP_W_M
                 else:
-                    h_seg = H - strip_h_m * (n_strips - 1)
-                    if h_seg < 1e-9:
-                        h_seg = strip_h_m
+                    seg_w = cut_len - STRIP_W_M * (n_strips - 1)
+                    if seg_w < 1e-9:
+                        seg_w = STRIP_W_M
 
-                key = f"{W:.2f}м × {h_seg:.2f}м"
+                # смуга: "довжина × ширина(по 0,5)"
+                key = f"{strip_label_len:.2f}м × {seg_w:.2f}м"
                 strips_dict[key] = strips_dict.get(key, 0) + 1
 
             patch_rows.append([
@@ -724,38 +734,34 @@ else:
                 f"W={W:.2f} м; H={H:.2f} м",
                 fmt_m2(area_i),
                 fmt_m(per_i),
-                f"{n_strips} смуг",
+                f"{n_strips} смуг (0,50 м)",
                 fmt_m(join_i)
             ])
 
-        # Геометрія швів
         weld_geom_perimeter = total_perimeter_geom
         weld_geom_joins = total_join_geom
         weld_geom_total = weld_geom_perimeter + weld_geom_joins
 
-        # Наплавлення з урахуванням ліній та проходів
         dep_perimeter = weld_geom_perimeter * seam_lines_perimeter * passes
         dep_joins = weld_geom_joins * seam_lines_on_lap * passes
         weld_deposition_total = dep_perimeter + dep_joins
 
-        # Матеріал з урахуванням нахлесту між смугами:
-        # просте технологічне наближення: додаткова площа ≈ (кількість стиків) * W * overlap
-        # (це площа перекриття, яку фактично додаємо як витрату матеріалу)
-        # -> по всіх латках: overlap_area = total_join_geom * overlap
+        # ✅ додаткова площа перекриття від нахлесту між смугами:
         overlap_area = total_join_geom * overlap
         used_material_area = total_area + overlap_area
 
         sheet_area = 6.0 * 1.5
         total_sheets = math.ceil(used_material_area / sheet_area)
 
-        # Електроди від наплавлення
         electrodes_mass = weld_deposition_total * spec_consumption
         packs_needed = math.ceil(electrodes_mass / pack_mass)
 
-        # Відомість смуг
         strips_items = sorted(strips_dict.items(), key=lambda x: x[0])
         for k, v in strips_items:
             strips_rows.append([k.replace("×", "x"), f"{v} шт"])
+
+        # далі твій WEB/PDF вивід можна лишати як є (тільки поля "Висота смуги" прибрати або замінити на 0,5 м)
+
 
         # =============================
         # WEB ВИВІД
