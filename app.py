@@ -7,7 +7,7 @@ from io import BytesIO
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.image as mpimg
 
-VERSION = "1.7"
+VERSION = "1.7.1"
 
 # -----------------------------
 # Streamlit
@@ -22,7 +22,6 @@ def clamp(x, a, b):
     return max(a, min(b, x))
 
 def primitive_F(R: float, y: float) -> float:
-    """Первісна для 2*sqrt(R^2-y^2): F(y)= y*sqrt(R^2-y^2) + R^2*asin(y/R)"""
     y = clamp(y, -R, R)
     inside = max(0.0, R * R - y * y)
     return y * math.sqrt(inside) + R * R * math.asin(clamp(y / R, -1.0, 1.0))
@@ -33,10 +32,6 @@ def chord_len(R: float, y: float) -> float:
     return 2.0 * math.sqrt(max(0.0, R*R - y*y))
 
 def build_patterns(Wrem: float):
-    """
-    - Wrem 4..6: "шахматка" як було
-    - інакше: сегментація на 3.0 м + залишок
-    """
     eps = 1e-6
     if abs(Wrem - 4.0) < eps:
         return [[3.0, 1.0], [1.0, 3.0]]
@@ -88,14 +83,16 @@ def fmt_m2(x): return f"{x:.3f} м²"
 def fmt_kg(x): return f"{x:.2f} кг"
 
 # -----------------------------
-# Реквізити звіту
+# Реквізити звіту (додано ID резервуара)
 # -----------------------------
-meta_c1, meta_c2, meta_c3 = st.columns([2, 1, 1])
+meta_c1, meta_c2, meta_c3, meta_c4 = st.columns([2, 1, 1, 1])
 with meta_c1:
     tank_type = st.text_input("Тип резервуара", value="Паливний резервуар")
 with meta_c2:
-    serial_no = st.text_input("Заводський №", value="—")
+    tank_id = st.text_input("ID резервуара", value="—")  # ✅ НОВЕ
 with meta_c3:
+    serial_no = st.text_input("Заводський №", value="—")
+with meta_c4:
     repair_date = st.date_input("Дата ремонту", value=date.today())
 
 st.markdown("---")
@@ -108,12 +105,11 @@ mode = st.radio(
     ["Ремонт резервуара (повний)", "Ремонт резервуара (латочний)"],
     horizontal=True
 )
-
 is_full = (mode == "Ремонт резервуара (повний)")
 is_patch = not is_full
 
 # -----------------------------
-# Налаштування електродів (спільні)
+# Електроди / витрата (спільні)
 # -----------------------------
 st.markdown("### Електроди / витрата")
 t1, t2, t3 = st.columns(3)
@@ -127,7 +123,7 @@ with t3:
 st.markdown("---")
 
 # -----------------------------
-# Ввід (повний ремонт) — активний тільки в цьому режимі
+# Вхідні дані (повний ремонт)
 # -----------------------------
 st.markdown("### Вхідні дані")
 col1, col2, col3, col4 = st.columns(4)
@@ -141,7 +137,7 @@ with col4:
     overlap_cm = st.number_input("Нахлест, см", value=5.0, min_value=0.0, step=0.5, format="%.1f", disabled=is_patch)
 
 # -----------------------------
-# Налаштування швів (професійно, прозоро)
+# Налаштування швів (повний ремонт)
 # -----------------------------
 st.markdown("### Налаштування під технологію (шви)")
 w1, w2, w3, w4 = st.columns(4)
@@ -155,7 +151,7 @@ with w4:
     shell_to_bottom_lines = st.selectbox("Ліній шва на приєднанні (коло стику)", [1, 2], index=1, disabled=(is_patch or (not include_shell_to_bottom)))
 
 # -----------------------------
-# Латочний ремонт — активний тільки тут
+# Латочний ремонт
 # -----------------------------
 st.markdown("---")
 st.markdown("### Латочний ремонт (прямокутні латки)")
@@ -173,7 +169,6 @@ with p4:
 patch_dims = []
 if is_patch:
     st.markdown("#### Розміри латок (мм)")
-    # акуратно, професійно: таблиця полів
     for i in range(int(n_patches)):
         cA, cB = st.columns(2)
         with cA:
@@ -186,31 +181,25 @@ if is_patch:
 # Розрахунок
 # -----------------------------
 if st.button("Розрахувати"):
-    # ==========================================================
-    # A) ЛАТОЧНИЙ РЕМОНТ
-    # ==========================================================
+    # ============ ЛАТОЧНИЙ ============
     if is_patch:
-        # площа латок (м²)
         patches_m = []
         for (w_mm, h_mm) in patch_dims:
-            w_m = w_mm / 1000.0
-            h_m = h_mm / 1000.0
-            patches_m.append((w_m, h_m))
+            patches_m.append((w_mm / 1000.0, h_mm / 1000.0))
 
         area_patches = sum(w*h for w, h in patches_m)
         area_used = area_patches * (1.0 + patch_allowance_pct/100.0)
 
-        # довжина швів — технологічна (по периметру, lines)
         weld_per_patch = [2.0*(w+h) * patch_weld_lines for (w, h) in patches_m]
         weld_total = sum(weld_per_patch)
 
         electrodes_mass = weld_total * spec_consumption
         packs_needed = math.ceil(electrodes_mass / pack_mass)
 
-        # --------- ВЕБ ВИВІД ----------
         st.markdown("## Результати (латочний ремонт)")
         left_lines = [
             f"Тип резервуара: {tank_type}",
+            f"ID резервуара: {tank_id}",  # ✅
             f"Заводський №: {serial_no}",
             f"Дата ремонту: {repair_date.strftime('%d.%m.%Y')}",
             f"Примітка: {patch_note}",
@@ -247,10 +236,8 @@ if st.button("Розрахувати"):
             st.markdown("### Відомість латок")
             st.table([{"Латка": r[0], "Розмір": r[1], "Площа": r[2], "Наплавлення": r[3]} for r in patch_rows])
 
-        # --------- PDF (3 сторінки, без “з’їздів”) ----------
         pdf_buffer = BytesIO()
         with PdfPages(pdf_buffer) as pdf:
-            # Page 1: коротка шапка + таблиця ремонту
             fig1 = plt.figure(figsize=(11.69, 8.27))
             fig1.suptitle("ЗВІТ: ЛАТОЧНИЙ РЕМОНТ (ПРЯМОКУТНІ ЛАТКИ)", fontsize=16, fontweight="bold", y=0.965)
 
@@ -262,9 +249,9 @@ if st.button("Розрахувати"):
             ax_meta = fig1.add_subplot(gs[0, :])
             ax_meta.axis("off")
             meta_lines = [
-                f"Тип резервуара: {tank_type}    |    Заводський №: {serial_no}    |    Дата ремонту: {repair_date.strftime('%d.%m.%Y')}",
+                f"Тип резервуара: {tank_type}    |    ID: {tank_id}    |    Заводський №: {serial_no}    |    Дата: {repair_date.strftime('%d.%m.%Y')}",
                 f"Кількість латок: {int(n_patches)} шт   |   Запас матеріалу: {patch_allowance_pct:.1f} %",
-                f"Загальна довжина наплавлення: {weld_total:.2f} м   |   Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг (~ {packs_needed} пач.)",
+                f"Наплавлення: {weld_total:.2f} м   |   Електроди Ø{electrode_diam_mm:.1f} мм: {electrodes_mass:.2f} кг (~ {packs_needed} пач.)",
             ]
             ax_meta.text(0.01, 0.92, meta_lines[0], fontsize=11, fontweight="bold", va="top")
             ax_meta.text(0.01, 0.62, meta_lines[1], fontsize=10, va="top")
@@ -277,6 +264,7 @@ if st.button("Розрахувати"):
 
             repair_rows = [
                 ["Тип резервуара", tank_type],
+                ["ID резервуара", tank_id],
                 ["Заводський №", serial_no],
                 ["Дата ремонту", repair_date.strftime("%d.%m.%Y")],
                 ["Кількість латок", f"{int(n_patches)} шт"],
@@ -297,7 +285,6 @@ if st.button("Розрахувати"):
             pdf.savefig(fig1)
             plt.close(fig1)
 
-            # Page 2: відомість латок (таблиця)
             fig2 = plt.figure(figsize=(11.69, 8.27))
             fig2.suptitle("Відомість латок (деталізація)", fontsize=16, fontweight="bold", y=0.965)
             ax = fig2.add_subplot(111)
@@ -311,6 +298,7 @@ if st.button("Розрахувати"):
         st.markdown("---")
         st.markdown("### Збереження результатів")
         st.download_button("Зберегти звіт як PDF", pdf_buffer.getvalue(), "резервуар_звіт_латки.pdf", "application/pdf")
+
 
     # ==========================================================
     # B) ПОВНИЙ РЕМОНТ (як ми робили)
